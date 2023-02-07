@@ -21,7 +21,7 @@
             },
             "args": [
                 "--config-filepath",
-                "./config.yaml"
+                "./src/config/config.yaml"
             ],
             "cwd": "${workspaceFolder}"
         },

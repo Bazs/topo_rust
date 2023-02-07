@@ -1,0 +1,5 @@
+osm_bounding_box:
+  left_lon: 10.0
+  right_lon: 11.0
+  bottom_lat: 10.0
+  top_lat: 11.0
