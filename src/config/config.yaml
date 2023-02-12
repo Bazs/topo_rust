@@ -3,3 +3,4 @@ osm_bounding_box:
   right_lon: 139.792244
   bottom_lat: 35.683695
   top_lat: 35.685717
+data_dir: ./data

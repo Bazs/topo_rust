@@ -1,5 +1,5 @@
 
-![CI](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml/badge.svg)
+[![CI](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml/badge.svg)](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml)
 
 ---
 

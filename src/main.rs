@@ -1,44 +1,57 @@
+extern crate log;
+pub mod geofile;
 pub mod osm;
-
-use std::{fs::read_to_string, path::Path};
-
+use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
 use anyhow::anyhow;
 use clap::Parser;
-use yaml_rust::YamlLoader;
-
-use crate::osm::download::{download_osm_data_by_bbox, WgsBoundingBox};
+use serde::Deserialize;
+use std::{fs::read_to_string, path::Path};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    // Path to the input config file.
+    /// Path to the input config file.
     #[arg(short, long)]
     config_filepath: String,
 }
 
+#[derive(Deserialize, Debug)]
+struct Config<'a> {
+    osm_bounding_box: WgsBoundingBox,
+    data_dir: &'a str,
+}
+
 fn try_main() -> anyhow::Result<()> {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info")
+    }
+
     let args = Args::try_parse()?;
     if !Path::new(&args.config_filepath).exists() {
         return Err(anyhow!("Config file {} not found", &args.config_filepath));
     }
     let config_contents = read_to_string(args.config_filepath)?;
-    let config = &YamlLoader::load_from_str(&config_contents)?[0];
-    dbg!(&config);
-    let bounding_box = &config["osm_bounding_box"];
-    let osm_data = download_osm_data_by_bbox(&WgsBoundingBox {
-        left_lon: bounding_box["left_lon"].as_f64().unwrap(),
-        bottom_lat: bounding_box["bottom_lat"].as_f64().unwrap(),
-        right_lon: bounding_box["right_lon"].as_f64().unwrap(),
-        top_lat: bounding_box["top_lat"].as_f64().unwrap(),
-    })?;
-    dbg!(&osm_data);
+    let config: Config = serde_yaml::from_str(&config_contents)?;
+    log::info!(
+        "Syncing OSM data for bounding box {:?}",
+        config.osm_bounding_box
+    );
+    let osm_filepath =
+        sync_osm_data_to_file(&config.osm_bounding_box, Path::new(&config.data_dir))?;
+    log::info!("Reading OSM ways");
+    let ways = osm::conversion::read_osm_ways_from_file(&osm_filepath)?;
+    log::info!("Read {} OSM ways", ways.len());
+    let geojson_dump_filepath = osm_filepath.with_extension("geojson");
+    log::info!("Writing ways to GeoJSON to {:?}", &geojson_dump_filepath);
+    geofile::geojson::write_lines_to_geojson(&ways, &geojson_dump_filepath)?;
     Ok(())
 }
 
 fn main() {
+    env_logger::init();
     if let Err(e) = try_main() {
-        eprintln!("Error: {:#?}", e);
+        eprintln!("Error: {:?}", e);
         std::process::exit(1)
     }
 }

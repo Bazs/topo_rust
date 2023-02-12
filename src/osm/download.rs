@@ -1,11 +1,13 @@
-use anyhow::anyhow;
-// use std::env::temp_dir;
-// use std::fs::File;
-// use std::io::Write;
-// use uuid::Uuid;
-
+extern crate osm_xml as osm;
+use anyhow::{anyhow, Ok};
 use geohash::{encode, Coord};
+use serde::Deserialize;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
+#[derive(Deserialize, Debug)]
 pub struct WgsBoundingBox {
     pub left_lon: f64,
     pub right_lon: f64,
@@ -38,11 +40,23 @@ pub fn download_osm_data_by_bbox(bbox: &WgsBoundingBox) -> anyhow::Result<String
         .build()?;
     let response = client.get(&query).send()?;
     response.text().or(Err(anyhow!("No response text")))
-    // let result = response.text()?;
-    // let mut tempfile = temp_dir();
-    // tempfile.push(Uuid::new_v4().to_string());
-    // tempfile.set_extension("xml");
-    // let mut file = File::create(&tempfile)?;
-    // write!(file, "{}", result)?;
-    // Ok(tempfile.as_path().to_str().unwrap().to_string())
 }
+
+pub fn sync_osm_data_to_file(bbox: &WgsBoundingBox, output_dir: &Path) -> anyhow::Result<PathBuf> {
+    let filename = get_filename_for_bbox(bbox)?;
+    let output_filepath = output_dir.join(filename);
+    if output_filepath.exists() {
+        log::info!(
+            "Local file exists for OSM data: {:?}",
+            output_filepath.canonicalize()
+        );
+        return Ok(output_filepath);
+    }
+
+    log::info!("Downloading OSM data");
+    let osm_data = download_osm_data_by_bbox(bbox)?;
+    fs::write(&output_filepath, osm_data).or(Err(anyhow!("Could not write OSM data to file")))?;
+    Ok(output_filepath)
+}
+
+

@@ -2,3 +2,6 @@
 
 # VS Code
 .vscode/
+
+# Working data folder
+/data
