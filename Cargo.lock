@@ -295,6 +295,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "geohash"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a18b809b13fa4f1c9ccfd94179cc429021a3517856b5160422c3d810c1e8546"
+dependencies = [
+ "geo-types",
+ "libm",
+]
+
+[[package]]
 name = "h2"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1056,6 +1066,7 @@ dependencies = [
  "anyhow",
  "clap",
  "geo",
+ "geohash",
  "reqwest",
  "uuid",
  "yaml-rust",
