@@ -3,7 +3,7 @@ pub mod geofile;
 pub mod osm;
 pub mod topo;
 use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
-use crate::topo::topo::calculate_topo;
+use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
 use clap::Parser;
 use serde::Deserialize;
@@ -47,7 +47,13 @@ fn try_main() -> anyhow::Result<()> {
     let geojson_dump_filepath = osm_filepath.with_extension("geojson");
     log::info!("Writing ways to GeoJSON to {:?}", &geojson_dump_filepath);
     geofile::geojson::write_lines_to_geojson(&ways, &geojson_dump_filepath)?;
-    calculate_topo(&ways, &ways)?;
+    calculate_topo(
+        &ways,
+        &ways,
+        &TopoParams {
+            resampling_distance: 6.0,
+        },
+    )?;
     Ok(())
 }
 
