@@ -1,6 +1,7 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, f64::consts::FRAC_PI_2};
 
 use geo::{CoordsIter, EuclideanLength, HasDimensions};
+use rayon::prelude::*;
 use reqwest::get;
 
 pub struct TopoResult {
@@ -19,13 +20,30 @@ pub fn calculate_topo(
     params: &TopoParams,
 ) -> anyhow::Result<TopoResult> {
     // Interpolate the edges.
-
+    let proposal_points = sample_points_on_lines(proposal, params.resampling_distance);
+    let ground_truth_points: Vec<RoadPoint> =
+        sample_points_on_lines(ground_truth, params.resampling_distance);
+    let mut proposal_kdtree = kdtree::KdTree::with_capacity(2, proposal.len());
+    for point in proposal_points {
+        proposal_kdtree.add(<[f64; 2]>::from(point.coord), ())?;
+    }
     unimplemented!();
 }
 
 struct RoadPoint {
     coord: geo::Coord,
     azimuth: f64,
+}
+
+fn sample_points_on_lines(
+    lines: &Vec<geo::LineString>,
+    resampling_distance: f64,
+) -> Vec<RoadPoint> {
+    lines
+        .par_iter()
+        .map(|linestr| sample_points_on_line(linestr, resampling_distance))
+        .flatten()
+        .collect()
 }
 
 fn sample_points_on_line(linestr: &geo::LineString, resampling_distance: f64) -> Vec<RoadPoint> {
@@ -74,8 +92,18 @@ fn sample_points_on_line(linestr: &geo::LineString, resampling_distance: f64) ->
 }
 
 fn get_normalized_line_azimuth(line: &geo::Line) -> f64 {
-    let delta = line.delta();
-    (delta.y / delta.x).atan()
+    let mut delta = line.delta();
+
+    // Normalize the delta so the X component is always positive.
+    if delta.x < 0.0 {
+        delta = -delta;
+    }
+    let azimuth = delta.y.atan2(delta.x);
+    if azimuth == -FRAC_PI_2 {
+        // Treat a vertical upwards line the same as a vertical downwards line.
+        return FRAC_PI_2;
+    }
+    azimuth
 }
 
 #[cfg(test)]
@@ -84,9 +112,30 @@ mod tests {
     use approx::assert_abs_diff_eq;
     use geo::{Coord, LineString};
     use rstest::rstest;
+    use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
+
+    use super::get_normalized_line_azimuth;
 
     fn tuple_vec_to_linestring(tuple_vec: &Vec<(f64, f64)>) -> LineString {
         tuple_vec.iter().map(|tup| Coord::from(*tup)).collect()
+    }
+
+    #[rstest]
+    #[case((0.0, 0.0), (1.0, 0.0), 0.0)]
+    #[case((0.0, 0.0), (-1.0, 0.0), 0.0)]
+    #[case((0.0, 0.0), (0.0, 1.0), FRAC_PI_2)]
+    #[case((0.0, 0.0), (0.0, -1.0), FRAC_PI_2)]
+    #[case((0.0, 0.0), (1.0, 1.0), FRAC_PI_4)]
+    #[case((0.0, 0.0), (-1.0, -1.0), FRAC_PI_4)]
+    #[case((0.0, 0.0), (1.0, -1.0), -FRAC_PI_4)]
+    fn test_get_normalized_line_azimuth(
+        #[case] line_start: (f64, f64),
+        #[case] line_end: (f64, f64),
+        #[case] expected_aximuth: f64,
+    ) {
+        let line = geo::Line::new(geo::Coord::from(line_start), geo::Coord::from(line_end));
+        let azimuth = get_normalized_line_azimuth(&line);
+        assert_abs_diff_eq!(expected_aximuth, azimuth);
     }
 
     #[rstest]

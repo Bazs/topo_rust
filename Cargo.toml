@@ -14,8 +14,10 @@ env_logger = "0.10.0"
 geo = "0.23.1"
 geohash = "0.13.0"
 geojson = "0.24.0"
+kdtree = "0.7.0"
 log = "0.4.17"
 osm-xml = "0.6.2"
+rayon = "1.6.1"
 reqwest = { version = "0.11.14", features = ["blocking"] }
 rstest = "0.16.0"
 serde = { version = "1.0.152", features = ["serde_derive"] }
