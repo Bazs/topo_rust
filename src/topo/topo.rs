@@ -1,8 +1,8 @@
-use std::{borrow::Borrow, f64::consts::FRAC_PI_2};
+use std::{collections::HashSet, f64::consts::FRAC_PI_2};
 
-use geo::{CoordsIter, EuclideanLength, HasDimensions};
+use geo::{CoordsIter, EuclideanLength};
+use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
-use reqwest::get;
 
 pub struct TopoResult {
     precision: f64,
@@ -12,6 +12,7 @@ pub struct TopoResult {
 
 pub struct TopoParams {
     pub resampling_distance: f64,
+    pub hole_radius: f64,
 }
 
 pub fn calculate_topo(
@@ -21,18 +22,74 @@ pub fn calculate_topo(
 ) -> anyhow::Result<TopoResult> {
     // Interpolate the edges.
     let proposal_points = sample_points_on_lines(proposal, params.resampling_distance);
+    let mut proposal_nodes = road_points_to_topo_nodes(&proposal_points);
     let ground_truth_points: Vec<RoadPoint> =
         sample_points_on_lines(ground_truth, params.resampling_distance);
-    let mut proposal_kdtree = kdtree::KdTree::with_capacity(2, proposal.len());
-    for point in proposal_points {
-        proposal_kdtree.add(<[f64; 2]>::from(point.coord), ())?;
+    let mut ground_truth_nodes = road_points_to_topo_nodes(&ground_truth_points);
+    let ground_truth_kdtree = build_kdtree_from_nodes(&ground_truth_nodes)?;
+
+    let mut matched_gt_ids = HashSet::new();
+
+    // TODO use par_iter_mut to parallelize
+    for mut proposal_node in proposal_nodes {
+        // TODO implement matching also based on azimuth
+        let gt_nodes_within_range = ground_truth_kdtree.within(
+            &<[f64; 2]>::from(proposal_node.road_point.coord),
+            params.hole_radius,
+            &squared_euclidean,
+        )?;
+        for gt_node in gt_nodes_within_range {
+            if !matched_gt_ids.contains(gt_node.1) {
+                proposal_node.matched = true;
+                // TODO implement saving the match distance proposal_node.match_distance =
+                matched_gt_ids.insert(gt_node.1);
+            }
+        }
     }
+    let matched_count = matched_gt_ids.len();
+    // TODO calculate score
     unimplemented!();
 }
 
 struct RoadPoint {
     coord: geo::Coord,
     azimuth: f64,
+}
+
+struct TopoNode<'a> {
+    road_point: &'a RoadPoint,
+    id: i64,
+    matched: bool,
+    match_distance: Option<f64>,
+}
+
+impl<'a> TopoNode<'a> {
+    fn new(point: &'a RoadPoint, id: i64) -> Self {
+        TopoNode {
+            road_point: &point,
+            id: id,
+            matched: false,
+            match_distance: None,
+        }
+    }
+}
+
+fn build_kdtree_from_nodes(
+    topo_nodes: &Vec<TopoNode>,
+) -> anyhow::Result<kdtree::KdTree<f64, i64, [f64; 2]>> {
+    let mut kdtree = kdtree::KdTree::with_capacity(2, topo_nodes.len());
+    for node in topo_nodes {
+        kdtree.add(<[f64; 2]>::from(node.road_point.coord), node.id)?;
+    }
+    Ok(kdtree)
+}
+
+fn road_points_to_topo_nodes(road_points: &Vec<RoadPoint>) -> Vec<TopoNode> {
+    road_points
+        .iter()
+        .enumerate()
+        .map(|(idx, road_point)| TopoNode::new(&road_point, idx as i64))
+        .collect()
 }
 
 fn sample_points_on_lines(

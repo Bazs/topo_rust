@@ -52,6 +52,7 @@ fn try_main() -> anyhow::Result<()> {
         &ways,
         &TopoParams {
             resampling_distance: 6.0,
+            hole_radius: 7.0
         },
     )?;
     Ok(())
