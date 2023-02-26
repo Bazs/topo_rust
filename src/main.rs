@@ -2,6 +2,7 @@ extern crate log;
 pub mod geofile;
 pub mod osm;
 pub mod topo;
+use crate::geofile::geojson::read_lines_from_geojson;
 use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
 use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
@@ -58,20 +59,20 @@ fn try_main() -> anyhow::Result<()> {
         GroundTruthConfig::Osm { bounding_box } => {
             get_ground_truth_from_osm(&bounding_box, &config.data_dir)?
         }
-        GroundTruthConfig::Geojson { filepath } => {
-            unimplemented!()
-        }
+        GroundTruthConfig::Geojson { filepath } => read_lines_from_geojson(&filepath)?,
     };
+    log::info!("Read {} ground truth edges", ground_truth_ways.len());
+    let proposal_ways = read_lines_from_geojson(&config.proposal_geojson_path)?;
+    log::info!("Read {} proposal edges", ground_truth_ways.len());
 
-    log::info!("Read {} ground truth ways", ground_truth_ways.len());
     let geojson_dump_filepath = config.data_dir.join("ground_truth.geojson");
     log::info!(
-        "Writing ground truth ways to GeoJSON to {:?}",
+        "Writing ground truth edges to GeoJSON to {:?}",
         &geojson_dump_filepath
     );
     geofile::geojson::write_lines_to_geojson(&ground_truth_ways, &geojson_dump_filepath)?;
     let topo_result = calculate_topo(
-        &ground_truth_ways,
+        &proposal_ways,
         &ground_truth_ways,
         &TopoParams {
             resampling_distance: 11.0,

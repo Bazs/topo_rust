@@ -1,4 +1,4 @@
-proposal_geojson_path: ''
+proposal_geojson_path: ./data/xn77hbrh_xn77j018_osm.geojson  # Put your own file here.
 ground_truth:
   !Osm
     bounding_box:
