@@ -65,7 +65,7 @@ fn try_main() -> anyhow::Result<()> {
     };
     log::info!("Read {} ground truth edges", ground_truth_ways.len());
     let proposal_ways = read_lines_from_geojson(&config.proposal_geojson_path)?;
-    log::info!("Read {} proposal edges", ground_truth_ways.len());
+    log::info!("Read {} proposal edges", proposal_ways.len());
 
     let utm_zone_number = get_utm_zone_number_for_wgs84_lines(&ground_truth_ways)?;
     let ground_truth_ways = convert_wgs84_lines_to_utm(&ground_truth_ways, utm_zone_number);

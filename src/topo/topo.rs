@@ -1,5 +1,6 @@
 use std::{collections::HashSet, f64::consts::FRAC_PI_2};
 
+use anyhow::anyhow;
 use geo::{CoordsIter, EuclideanLength};
 use indicatif::ProgressBar;
 use kdtree::distance::squared_euclidean;
@@ -25,7 +26,7 @@ pub fn calculate_topo(
     // Interpolate the edges.
     log::info!("Sampling points on proposal lines");
     let proposal_points = sample_points_on_lines(proposal, params.resampling_distance);
-    let mut proposal_nodes = road_points_to_topo_nodes(&proposal_points);
+    let proposal_nodes = road_points_to_topo_nodes(&proposal_points);
     log::info!("Sampling points on ground truth lines");
     let ground_truth_points: Vec<RoadPoint> =
         sample_points_on_lines(ground_truth, params.resampling_distance);
@@ -33,31 +34,43 @@ pub fn calculate_topo(
     log::info!("Building ground truth point lookup tree");
     let ground_truth_kdtree = build_kdtree_from_nodes(&ground_truth_nodes)?;
 
-    let mut matched_gt_ids = HashSet::new();
-
     log::info!(
         "Matching {} proposal points to {} ground truth points",
         proposal_nodes.len(),
         ground_truth_nodes.len()
     );
+
+    let squared_hole_radius = params.hole_radius.powi(2);
+    // Get the squared distances and indices of the GT nodes within range, if there are any within hole radius.
+    let prop_node_and_gt_nodes_result: Result<Vec<_>, anyhow::Error> = proposal_nodes
+        .par_iter()
+        .map(|proposal_node| {
+            let gt_distances_and_indices = ground_truth_kdtree
+                .within(
+                    &<[f64; 2]>::from(proposal_node.road_point.coord),
+                    squared_hole_radius,
+                    &squared_euclidean,
+                )
+                .or_else(|error| Err(anyhow!("Could not get nearest GT node, {}", error)))?;
+            Ok((proposal_node, gt_distances_and_indices))
+        })
+        .collect();
+    let matched_gt_distance_and_idx = prop_node_and_gt_nodes_result?;
+
+    let mut matched_gt_ids = HashSet::new();
     let progress_bar = ProgressBar::new(proposal_nodes.len().try_into().unwrap());
-    // TODO use par_iter_mut to parallelize
-    for mut proposal_node in proposal_nodes.iter_mut() {
-        // TODO implement matching also based on azimuth
-        let gt_nodes_within_range = ground_truth_kdtree.within(
-            &<[f64; 2]>::from(proposal_node.road_point.coord),
-            params.hole_radius,
-            &squared_euclidean,
-        )?;
-        for gt_node in gt_nodes_within_range {
-            if !matched_gt_ids.contains(gt_node.1) {
-                proposal_node.matched = true;
+    for (_, gt_distances_and_indices) in matched_gt_distance_and_idx {
+        for (_, gt_idx) in gt_distances_and_indices {
+            if !matched_gt_ids.contains(gt_idx) {
+                // proposal_node.matched = true;
                 // TODO implement saving the match distance: proposal_node.match_distance =
-                matched_gt_ids.insert(gt_node.1);
+                matched_gt_ids.insert(*gt_idx);
+                break;
             }
         }
-        progress_bar.inc(1);
     }
+    progress_bar.inc(1);
+
     let true_positive_count = matched_gt_ids.len();
     let false_positive_count = proposal_nodes.len() - true_positive_count;
     let false_negative_count = ground_truth_nodes.len() - true_positive_count;
