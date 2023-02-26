@@ -5,6 +5,10 @@
 
 # Rust implementation of the TOPO metric
 
+## Building
+
+Please make sure to build the binary using `cargo build --release`, otherwise the runtime performance will be slow.
+
 ## Usage
 
 The executable is configured via a YAML configuration file.
