@@ -1395,6 +1395,7 @@ dependencies = [
  "rstest",
  "serde",
  "serde_yaml",
+ "utm",
  "uuid",
 ]
 
@@ -1473,6 +1474,12 @@ dependencies = [
  "idna",
  "percent-encoding",
 ]
+
+[[package]]
+name = "utm"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95b09e3b3a0abd1ccb77673a6b7b8875d9d1c80626154add451cf18392dc4c3c"
 
 [[package]]
 name = "uuid"
