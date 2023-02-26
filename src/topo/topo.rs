@@ -164,7 +164,7 @@ fn sample_points_on_line(linestr: &geo::LineString, resampling_distance: f64) ->
     }
     output_points.push(RoadPoint {
         coord: *linestr.coords().last().unwrap(),
-        azimuth: get_normalized_line_azimuth(&linestr.lines().last().unwrap()),
+        azimuth: get_normalized_line_azimuth(&linestr.lines().last().unwrap()), // TODO create the line in a different way, iterating through the lines() is very wasteful
     });
     output_points
 }

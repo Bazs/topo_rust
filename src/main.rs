@@ -7,6 +7,7 @@ use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
 use clap::Parser;
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::{fs::read_to_string, path::Path};
 
 /// Simple program to greet a person
@@ -19,9 +20,26 @@ struct Args {
 }
 
 #[derive(Deserialize, Debug)]
-struct Config<'a> {
-    osm_bounding_box: WgsBoundingBox,
-    data_dir: &'a str,
+enum GroundTruthConfig {
+    Geojson { filepath: PathBuf },
+    Osm { bounding_box: WgsBoundingBox },
+}
+
+#[derive(Deserialize, Debug)]
+struct Config {
+    proposal_geojson_path: PathBuf,
+    ground_truth: GroundTruthConfig,
+    data_dir: PathBuf,
+}
+
+fn get_ground_truth_from_osm(
+    bounding_box: &WgsBoundingBox,
+    data_dir: &PathBuf,
+) -> anyhow::Result<Vec<geo::LineString>> {
+    log::info!("Syncing OSM data for bounding box {:?}", bounding_box);
+    let osm_filepath = sync_osm_data_to_file(&bounding_box, &data_dir)?;
+    log::info!("Reading OSM ways");
+    osm::conversion::read_osm_ways_from_file(&osm_filepath)
 }
 
 fn try_main() -> anyhow::Result<()> {
@@ -35,21 +53,26 @@ fn try_main() -> anyhow::Result<()> {
     }
     let config_contents = read_to_string(args.config_filepath)?;
     let config: Config = serde_yaml::from_str(&config_contents)?;
+
+    let ground_truth_ways = match config.ground_truth {
+        GroundTruthConfig::Osm { bounding_box } => {
+            get_ground_truth_from_osm(&bounding_box, &config.data_dir)?
+        }
+        GroundTruthConfig::Geojson { filepath } => {
+            unimplemented!()
+        }
+    };
+
+    log::info!("Read {} ground truth ways", ground_truth_ways.len());
+    let geojson_dump_filepath = config.data_dir.join("ground_truth.geojson");
     log::info!(
-        "Syncing OSM data for bounding box {:?}",
-        config.osm_bounding_box
+        "Writing ground truth ways to GeoJSON to {:?}",
+        &geojson_dump_filepath
     );
-    let osm_filepath =
-        sync_osm_data_to_file(&config.osm_bounding_box, Path::new(&config.data_dir))?;
-    log::info!("Reading OSM ways");
-    let ways = osm::conversion::read_osm_ways_from_file(&osm_filepath)?;
-    log::info!("Read {} OSM ways", ways.len());
-    let geojson_dump_filepath = osm_filepath.with_extension("geojson");
-    log::info!("Writing ways to GeoJSON to {:?}", &geojson_dump_filepath);
-    geofile::geojson::write_lines_to_geojson(&ways, &geojson_dump_filepath)?;
+    geofile::geojson::write_lines_to_geojson(&ground_truth_ways, &geojson_dump_filepath)?;
     let topo_result = calculate_topo(
-        &ways,
-        &ways,
+        &ground_truth_ways,
+        &ground_truth_ways,
         &TopoParams {
             resampling_distance: 11.0,
             hole_radius: 7.0,

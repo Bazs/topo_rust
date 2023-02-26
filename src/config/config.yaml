@@ -1,6 +1,9 @@
-osm_bounding_box:
-  left_lon: 139.788745
-  right_lon: 139.792244
-  bottom_lat: 35.683695
-  top_lat: 35.685717
+proposal_geojson_path: ''
+ground_truth:
+  !Osm
+    bounding_box:
+      left_lon: 139.788745
+      right_lon: 139.792244
+      bottom_lat: 35.683695
+      top_lat: 35.685717
 data_dir: ./data
