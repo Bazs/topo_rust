@@ -4,6 +4,7 @@ use geo::{CoordsIter, EuclideanLength};
 use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
 
+#[derive(PartialEq, Debug)]
 pub struct TopoResult {
     precision: f64,
     recall: f64,
@@ -25,13 +26,13 @@ pub fn calculate_topo(
     let mut proposal_nodes = road_points_to_topo_nodes(&proposal_points);
     let ground_truth_points: Vec<RoadPoint> =
         sample_points_on_lines(ground_truth, params.resampling_distance);
-    let mut ground_truth_nodes = road_points_to_topo_nodes(&ground_truth_points);
+    let ground_truth_nodes = road_points_to_topo_nodes(&ground_truth_points);
     let ground_truth_kdtree = build_kdtree_from_nodes(&ground_truth_nodes)?;
 
     let mut matched_gt_ids = HashSet::new();
 
     // TODO use par_iter_mut to parallelize
-    for mut proposal_node in proposal_nodes {
+    for mut proposal_node in proposal_nodes.iter_mut() {
         // TODO implement matching also based on azimuth
         let gt_nodes_within_range = ground_truth_kdtree.within(
             &<[f64; 2]>::from(proposal_node.road_point.coord),
@@ -41,14 +42,23 @@ pub fn calculate_topo(
         for gt_node in gt_nodes_within_range {
             if !matched_gt_ids.contains(gt_node.1) {
                 proposal_node.matched = true;
-                // TODO implement saving the match distance proposal_node.match_distance =
+                // TODO implement saving the match distance: proposal_node.match_distance =
                 matched_gt_ids.insert(gt_node.1);
             }
         }
     }
-    let matched_count = matched_gt_ids.len();
-    // TODO calculate score
-    unimplemented!();
+    let true_positive_count = matched_gt_ids.len();
+    let false_positive_count = proposal_nodes.len() - true_positive_count;
+    let false_negative_count = ground_truth_nodes.len() - true_positive_count;
+    let precision =
+        true_positive_count as f64 / (true_positive_count + false_positive_count) as f64;
+    let recall = true_positive_count as f64 / (true_positive_count + false_negative_count) as f64;
+    let f1_score = 2.0 * precision * recall / (precision + recall);
+    Ok(TopoResult {
+        precision,
+        recall,
+        f1_score,
+    })
 }
 
 struct RoadPoint {
@@ -167,15 +177,12 @@ fn get_normalized_line_azimuth(line: &geo::Line) -> f64 {
 mod tests {
     extern crate approx;
     use approx::assert_abs_diff_eq;
-    use geo::{Coord, LineString};
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
-    use super::get_normalized_line_azimuth;
-
-    fn tuple_vec_to_linestring(tuple_vec: &Vec<(f64, f64)>) -> LineString {
-        tuple_vec.iter().map(|tup| Coord::from(*tup)).collect()
-    }
+    use super::{
+        calculate_topo, get_normalized_line_azimuth, sample_points_on_line, TopoParams, TopoResult,
+    };
 
     #[rstest]
     #[case((0.0, 0.0), (1.0, 0.0), 0.0)]
@@ -211,11 +218,10 @@ mod tests {
         #[case] resampling_distance: f64,
         #[case] expected_coordinates: Vec<(f64, f64)>,
     ) {
-        let input_linestr = tuple_vec_to_linestring(&input_linestr);
-        let result = super::sample_points_on_line(&input_linestr, resampling_distance);
+        let input_linestr: geo::LineString = input_linestr.into();
+        let result = sample_points_on_line(&input_linestr, resampling_distance);
 
-        let expected_coords_linestr: geo::LineString =
-            tuple_vec_to_linestring(&expected_coordinates);
+        let expected_coords_linestr: geo::LineString = expected_coordinates.into();
         let actual_coords_linestr: geo::LineString =
             result.iter().map(|point| point.coord).collect();
         assert_abs_diff_eq!(
@@ -223,5 +229,42 @@ mod tests {
             actual_coords_linestr,
             epsilon = 1e-6
         );
+    }
+
+    #[fixture]
+    fn default_topo_params() -> TopoParams {
+        TopoParams {
+            hole_radius: 6.0,
+            resampling_distance: 11.0,
+        }
+    }
+
+    #[rstest]
+    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], TopoResult {
+        f1_score: 1.0,
+        precision: 1.0,
+        recall: 1.0
+    })] // Perfectly matching lines.
+    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (20.0, 0.0)], TopoResult {
+        f1_score: 0.5,
+        precision: 0.5,
+        recall: 0.5
+    })] // One line endpoint out of match range.
+    fn test_calculate_topo_two_lines(
+        #[case] proposal_line_coords: Vec<(f64, f64)>,
+        #[case] ground_truth_line_coods: Vec<(f64, f64)>,
+        #[case] expected_result: TopoResult,
+        default_topo_params: TopoParams,
+    ) {
+        let proposal_line: geo::LineString = proposal_line_coords.into();
+        let ground_truth_line: geo::LineString = ground_truth_line_coods.into();
+
+        let result = calculate_topo(
+            &vec![proposal_line],
+            &vec![ground_truth_line],
+            &default_topo_params,
+        );
+        assert!(result.is_ok());
+        assert_eq!(expected_result, result.unwrap())
     }
 }

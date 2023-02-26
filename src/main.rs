@@ -47,14 +47,15 @@ fn try_main() -> anyhow::Result<()> {
     let geojson_dump_filepath = osm_filepath.with_extension("geojson");
     log::info!("Writing ways to GeoJSON to {:?}", &geojson_dump_filepath);
     geofile::geojson::write_lines_to_geojson(&ways, &geojson_dump_filepath)?;
-    calculate_topo(
+    let topo_result = calculate_topo(
         &ways,
         &ways,
         &TopoParams {
-            resampling_distance: 6.0,
-            hole_radius: 7.0
+            resampling_distance: 11.0,
+            hole_radius: 7.0,
         },
     )?;
+    log::info!("Topo result: {:?}", topo_result);
     Ok(())
 }
 
