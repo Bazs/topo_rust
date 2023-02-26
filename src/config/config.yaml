@@ -1,9 +1,11 @@
-proposal_geojson_path: ./data/xn77hbrh_xn77j018_osm.geojson  # Put your own file here.
+proposal_geojson_path: ./data/ground_truth.geojson  # Put your own file here.
 ground_truth:
-  !Osm
-    bounding_box:
-      left_lon: 139.788745
-      right_lon: 139.792244
-      bottom_lat: 35.683695
-      top_lat: 35.685717
+  !Geojson
+    filepath: ./data/ground_truth.geojson
+  # !Osm
+  #   bounding_box: # ~46 square km of downtown Tokyo
+  #     left_lon: 139.77451342
+  #     right_lon: 139.850199790
+  #     bottom_lat: 35.650358475
+  #     top_lat: 35.71006819
 data_dir: ./data

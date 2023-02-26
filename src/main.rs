@@ -42,7 +42,7 @@ fn get_ground_truth_from_osm(
     log::info!("Syncing OSM data for bounding box {:?}", bounding_box);
     let osm_filepath = sync_osm_data_to_file(&bounding_box, &data_dir)?;
     log::info!("Reading OSM ways");
-    osm::conversion::read_osm_ways_from_file(&osm_filepath)
+    osm::conversion::read_osm_roads_from_file(&osm_filepath)
 }
 
 fn try_main() -> anyhow::Result<()> {
@@ -66,17 +66,17 @@ fn try_main() -> anyhow::Result<()> {
     log::info!("Read {} ground truth edges", ground_truth_ways.len());
     let proposal_ways = read_lines_from_geojson(&config.proposal_geojson_path)?;
     log::info!("Read {} proposal edges", proposal_ways.len());
-
-    let utm_zone_number = get_utm_zone_number_for_wgs84_lines(&ground_truth_ways)?;
-    let ground_truth_ways = convert_wgs84_lines_to_utm(&ground_truth_ways, utm_zone_number);
-    let proposal_ways = convert_wgs84_lines_to_utm(&proposal_ways, utm_zone_number);
-
     let geojson_dump_filepath = config.data_dir.join("ground_truth.geojson");
     log::info!(
         "Writing ground truth edges to GeoJSON to {:?}",
         &geojson_dump_filepath
     );
     geofile::geojson::write_lines_to_geojson(&ground_truth_ways, &geojson_dump_filepath)?;
+
+    let utm_zone_number = get_utm_zone_number_for_wgs84_lines(&ground_truth_ways)?;
+    let ground_truth_ways = convert_wgs84_lines_to_utm(&ground_truth_ways, utm_zone_number);
+    let proposal_ways = convert_wgs84_lines_to_utm(&proposal_ways, utm_zone_number);
+
     let topo_result = calculate_topo(
         &proposal_ways,
         &ground_truth_ways,

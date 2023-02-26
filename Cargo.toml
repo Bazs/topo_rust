@@ -14,7 +14,7 @@ env_logger = "0.10.0"
 geo = "0.23.1"
 geohash = "0.13.0"
 geojson = "0.24.0"
-indicatif = "0.17.3"
+indicatif = {version = "0.17.3", features = ["rayon"]}
 kdtree = "0.7.0"
 log = "0.4.17"
 osm-xml = "0.6.2"

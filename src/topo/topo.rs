@@ -2,7 +2,7 @@ use std::{collections::HashSet, f64::consts::FRAC_PI_2};
 
 use anyhow::anyhow;
 use geo::{CoordsIter, EuclideanLength};
-use indicatif::ProgressBar;
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
 
@@ -39,11 +39,14 @@ pub fn calculate_topo(
         proposal_nodes.len(),
         ground_truth_nodes.len()
     );
-
     let squared_hole_radius = params.hole_radius.powi(2);
     // Get the squared distances and indices of the GT nodes within range, if there are any within hole radius.
+    let progress_style =
+        ProgressStyle::with_template("{wide_bar} {pos}/{len} {percent}% elapsed: {elapsed_precise}").unwrap();
+
     let prop_node_and_gt_nodes_result: Result<Vec<_>, anyhow::Error> = proposal_nodes
         .par_iter()
+        .progress_with_style(progress_style)
         .map(|proposal_node| {
             let gt_distances_and_indices = ground_truth_kdtree
                 .within(

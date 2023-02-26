@@ -2,12 +2,13 @@ extern crate osm_xml as osm;
 use anyhow::anyhow;
 use std::{borrow::Borrow, path::Path};
 
-pub fn read_osm_ways_from_file(filepath: &Path) -> anyhow::Result<Vec<geo::LineString>> {
+pub fn read_osm_roads_from_file(filepath: &Path) -> anyhow::Result<Vec<geo::LineString>> {
     let infile = std::fs::File::open(filepath)?;
     let data = osm::OSM::parse(infile)?;
     data.ways
         .borrow()
         .into_iter()
+        .filter(|(_, way)| way.tags.iter().any(|tag| tag.key == "highway"))
         .map(|(_, way)| osm_way_to_linestring(&data, &way))
         .collect()
 }
