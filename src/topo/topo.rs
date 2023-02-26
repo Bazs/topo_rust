@@ -1,6 +1,7 @@
 use std::{collections::HashSet, f64::consts::FRAC_PI_2};
 
 use geo::{CoordsIter, EuclideanLength};
+use indicatif::ProgressBar;
 use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
 
@@ -22,15 +23,24 @@ pub fn calculate_topo(
     params: &TopoParams,
 ) -> anyhow::Result<TopoResult> {
     // Interpolate the edges.
+    log::info!("Sampling points on proposal lines");
     let proposal_points = sample_points_on_lines(proposal, params.resampling_distance);
     let mut proposal_nodes = road_points_to_topo_nodes(&proposal_points);
+    log::info!("Sampling points on ground truth lines");
     let ground_truth_points: Vec<RoadPoint> =
         sample_points_on_lines(ground_truth, params.resampling_distance);
     let ground_truth_nodes = road_points_to_topo_nodes(&ground_truth_points);
+    log::info!("Building ground truth point lookup tree");
     let ground_truth_kdtree = build_kdtree_from_nodes(&ground_truth_nodes)?;
 
     let mut matched_gt_ids = HashSet::new();
 
+    log::info!(
+        "Matching {} proposal points to {} ground truth points",
+        proposal_nodes.len(),
+        ground_truth_nodes.len()
+    );
+    let progress_bar = ProgressBar::new(proposal_nodes.len().try_into().unwrap());
     // TODO use par_iter_mut to parallelize
     for mut proposal_node in proposal_nodes.iter_mut() {
         // TODO implement matching also based on azimuth
@@ -46,6 +56,7 @@ pub fn calculate_topo(
                 matched_gt_ids.insert(gt_node.1);
             }
         }
+        progress_bar.inc(1);
     }
     let true_positive_count = matched_gt_ids.len();
     let false_positive_count = proposal_nodes.len() - true_positive_count;
