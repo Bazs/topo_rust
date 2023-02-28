@@ -7,10 +7,16 @@ use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
 
 #[derive(PartialEq, Debug)]
-pub struct TopoResult {
+pub struct F1ScoreResult {
     precision: f64,
     recall: f64,
     f1_score: f64,
+}
+
+pub struct TopoResult {
+    pub f1_score_result: F1ScoreResult,
+    pub ground_truth_nodes: Vec<TopoNode>,
+    pub proposal_nodes: Vec<TopoNode>,
 }
 
 pub struct TopoParams {
@@ -18,7 +24,7 @@ pub struct TopoParams {
     pub hole_radius: f64,
 }
 
-pub fn calculate_topo(
+pub fn calculate_topo<'a>(
     proposal: &Vec<geo::LineString>,
     ground_truth: &Vec<geo::LineString>,
     params: &TopoParams,
@@ -26,11 +32,11 @@ pub fn calculate_topo(
     // Interpolate the edges.
     log::info!("Sampling points on proposal lines");
     let proposal_points = sample_points_on_lines(proposal, params.resampling_distance);
-    let proposal_nodes = road_points_to_topo_nodes(&proposal_points);
+    let mut proposal_nodes = road_points_to_topo_nodes(proposal_points);
     log::info!("Sampling points on ground truth lines");
     let ground_truth_points: Vec<RoadPoint> =
         sample_points_on_lines(ground_truth, params.resampling_distance);
-    let ground_truth_nodes = road_points_to_topo_nodes(&ground_truth_points);
+    let mut ground_truth_nodes = road_points_to_topo_nodes(ground_truth_points);
     log::info!("Building ground truth point lookup tree");
     let ground_truth_kdtree = build_kdtree_from_nodes(&ground_truth_nodes)?;
 
@@ -39,13 +45,15 @@ pub fn calculate_topo(
         proposal_nodes.len(),
         ground_truth_nodes.len()
     );
-    let squared_hole_radius = params.hole_radius.powi(2);
     // Get the squared distances and indices of the GT nodes within range, if there are any within hole radius.
-    let progress_style =
-        ProgressStyle::with_template("{wide_bar} {pos}/{len} {percent}% elapsed: {elapsed_precise}").unwrap();
-
+    let squared_hole_radius = params.hole_radius.powi(2);
+    let progress_style = ProgressStyle::with_template(
+        "{wide_bar} {pos}/{len} {percent}% elapsed: {elapsed_precise}",
+    )
+    .unwrap();
+    log::info!("Looking up ground truth nodes within hole radius");
     let prop_node_and_gt_nodes_result: Result<Vec<_>, anyhow::Error> = proposal_nodes
-        .par_iter()
+        .par_iter_mut()
         .progress_with_style(progress_style)
         .map(|proposal_node| {
             let gt_distances_and_indices = ground_truth_kdtree
@@ -58,21 +66,28 @@ pub fn calculate_topo(
             Ok((proposal_node, gt_distances_and_indices))
         })
         .collect();
-    let matched_gt_distance_and_idx = prop_node_and_gt_nodes_result?;
+    let mut matched_gt_distance_and_idx = prop_node_and_gt_nodes_result?;
 
+    log::info!("Determining matches for proposal nodes");
     let mut matched_gt_ids = HashSet::new();
-    let progress_bar = ProgressBar::new(proposal_nodes.len().try_into().unwrap());
-    for (_, gt_distances_and_indices) in matched_gt_distance_and_idx {
-        for (_, gt_idx) in gt_distances_and_indices {
+    let progress_bar = ProgressBar::new(matched_gt_distance_and_idx.len() as u64);
+    for (proposal_node, gt_distances_and_indices) in matched_gt_distance_and_idx.iter_mut() {
+        for (squared_distance, gt_idx) in gt_distances_and_indices {
             if !matched_gt_ids.contains(gt_idx) {
-                // proposal_node.matched = true;
-                // TODO implement saving the match distance: proposal_node.match_distance =
+                proposal_node.matched = true;
+                proposal_node.match_distance = Some(squared_distance.sqrt());
                 matched_gt_ids.insert(*gt_idx);
                 break;
             }
         }
+        progress_bar.inc(1);
     }
-    progress_bar.inc(1);
+
+    for ground_truth_node in ground_truth_nodes.iter_mut() {
+        if matched_gt_ids.contains(&ground_truth_node.id) {
+            ground_truth_node.matched = true;
+        }
+    }
 
     let true_positive_count = matched_gt_ids.len();
     let false_positive_count = proposal_nodes.len() - true_positive_count;
@@ -82,9 +97,13 @@ pub fn calculate_topo(
     let recall = true_positive_count as f64 / (true_positive_count + false_negative_count) as f64;
     let f1_score = 2.0 * precision * recall / (precision + recall);
     Ok(TopoResult {
-        precision,
-        recall,
-        f1_score,
+        f1_score_result: F1ScoreResult {
+            precision,
+            recall,
+            f1_score,
+        },
+        ground_truth_nodes,
+        proposal_nodes,
     })
 }
 
@@ -93,17 +112,17 @@ struct RoadPoint {
     azimuth: f64,
 }
 
-struct TopoNode<'a> {
-    road_point: &'a RoadPoint,
+pub struct TopoNode {
+    road_point: RoadPoint,
     id: i64,
     matched: bool,
     match_distance: Option<f64>,
 }
 
-impl<'a> TopoNode<'a> {
-    fn new(point: &'a RoadPoint, id: i64) -> Self {
+impl TopoNode {
+    fn new(point: RoadPoint, id: i64) -> Self {
         TopoNode {
-            road_point: &point,
+            road_point: point,
             id: id,
             matched: false,
             match_distance: None,
@@ -121,11 +140,11 @@ fn build_kdtree_from_nodes(
     Ok(kdtree)
 }
 
-fn road_points_to_topo_nodes(road_points: &Vec<RoadPoint>) -> Vec<TopoNode> {
+fn road_points_to_topo_nodes(road_points: Vec<RoadPoint>) -> Vec<TopoNode> {
     road_points
-        .iter()
+        .into_iter()
         .enumerate()
-        .map(|(idx, road_point)| TopoNode::new(&road_point, idx as i64))
+        .map(|(idx, road_point)| TopoNode::new(road_point, idx as i64))
         .collect()
 }
 
@@ -208,7 +227,8 @@ mod tests {
     use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
     use super::{
-        calculate_topo, get_normalized_line_azimuth, sample_points_on_line, TopoParams, TopoResult,
+        calculate_topo, get_normalized_line_azimuth, sample_points_on_line, F1ScoreResult,
+        TopoParams,
     };
 
     #[rstest]
@@ -267,12 +287,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], TopoResult {
+    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], F1ScoreResult {
         f1_score: 1.0,
         precision: 1.0,
         recall: 1.0
     })] // Perfectly matching lines.
-    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (20.0, 0.0)], TopoResult {
+    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (20.0, 0.0)], F1ScoreResult {
         f1_score: 0.5,
         precision: 0.5,
         recall: 0.5
@@ -280,7 +300,7 @@ mod tests {
     fn test_calculate_topo_two_lines(
         #[case] proposal_line_coords: Vec<(f64, f64)>,
         #[case] ground_truth_line_coods: Vec<(f64, f64)>,
-        #[case] expected_result: TopoResult,
+        #[case] expected_result: F1ScoreResult,
         default_topo_params: TopoParams,
     ) {
         let proposal_line: geo::LineString = proposal_line_coords.into();
@@ -292,6 +312,6 @@ mod tests {
             &default_topo_params,
         );
         assert!(result.is_ok());
-        assert_eq!(expected_result, result.unwrap())
+        assert_eq!(expected_result, result.unwrap().f1_score_result)
     }
 }

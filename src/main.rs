@@ -85,7 +85,7 @@ fn try_main() -> anyhow::Result<()> {
             hole_radius: 7.0,
         },
     )?;
-    log::info!("{:?}", topo_result);
+    log::info!("{:?}", topo_result.f1_score_result);
     Ok(())
 }
 
