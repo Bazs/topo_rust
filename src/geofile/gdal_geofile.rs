@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use gdal::vector::LayerAccess;
 use rayon::prelude::*;
 use std::{collections::HashSet, path::Path};
@@ -23,9 +23,10 @@ pub fn write_features_to_geofile(
     features: &Vec<Feature>,
     output_filepath: &Path,
     crs: Option<&gdal::spatial_ref::SpatialRef>,
+    // TODO make driver optional and attempt to derive it from extension
     driver: &str,
 ) -> anyhow::Result<()> {
-    let driver = gdal::DriverManager::get_driver_by_name(driver)?;
+    let driver = gdal::DriverManager::get_driver_by_name(driver).context("Getting GDAL driver")?;
 
     if features.is_empty() {
         return Ok(());

@@ -92,7 +92,6 @@ fn try_main() -> anyhow::Result<()> {
     )?;
     log::info!("{:?}", topo_result.f1_score_result);
     let utm_zone_crs = utm_zone_to_crs(utm_zone_number, utm_zone_letter, None)?;
-    dbg!(&utm_zone_crs);
     write_features_to_geofile(
         &topo_result
             .proposal_nodes
