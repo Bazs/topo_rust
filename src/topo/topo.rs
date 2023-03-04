@@ -1,10 +1,15 @@
-use std::{collections::HashSet, f64::consts::FRAC_PI_2};
+use std::{
+    collections::{HashMap, HashSet},
+    f64::consts::FRAC_PI_2,
+};
 
 use anyhow::anyhow;
 use geo::{CoordsIter, EuclideanLength};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
+
+use crate::geofile::feature::Feature;
 
 #[derive(PartialEq, Debug)]
 pub struct F1ScoreResult {
@@ -117,6 +122,25 @@ pub struct TopoNode {
     id: i64,
     matched: bool,
     match_distance: Option<f64>,
+}
+
+impl From<&TopoNode> for Feature {
+    fn from(node: &TopoNode) -> Self {
+        Self {
+            geometry: geo::Geometry::Point(geo::Point::from(node.road_point.coord)),
+            attributes: Some(HashMap::from([
+                ("id".to_string(), node.id.to_string()),
+                ("matched".to_string(), node.matched.to_string()),
+                (
+                    "match_distance".to_string(),
+                    match node.match_distance {
+                        Some(distance) => distance.to_string(),
+                        None => "".to_string(),
+                    },
+                ),
+            ])),
+        }
+    }
 }
 
 impl TopoNode {

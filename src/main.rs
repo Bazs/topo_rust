@@ -6,12 +6,14 @@ pub mod topo;
 use crate::crs::utm_conversion::{
     convert_wgs84_lines_to_utm, get_utm_zone_for_wgs84_lines, utm_zone_to_crs,
 };
+use crate::geofile::feature::Feature;
+use crate::geofile::gdal_geofile::{write_features_to_geofile, GdalDriverType};
 use crate::geofile::geojson::read_lines_from_geojson;
-use crate::geofile::geopackage::write_lines_to_geopackage;
 use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
 use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
 use clap::Parser;
+use rayon::prelude::*;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::{fs::read_to_string, path::Path};
@@ -91,12 +93,25 @@ fn try_main() -> anyhow::Result<()> {
     log::info!("{:?}", topo_result.f1_score_result);
     let utm_zone_crs = utm_zone_to_crs(utm_zone_number, utm_zone_letter, None)?;
     dbg!(&utm_zone_crs);
-    let ground_truth_nodes_filepath = config.data_dir.join("ground_truth_nodes.gpkg");
-    // TODO write the actual output nodes from the TOPO algorithm instead of the proposal.
-    write_lines_to_geopackage(
-        &proposal_ways,
-        &ground_truth_nodes_filepath,
-        Some(utm_zone_crs),
+    write_features_to_geofile(
+        &topo_result
+            .proposal_nodes
+            .par_iter()
+            .map(|node| Feature::from(node))
+            .collect(),
+        &config.data_dir.join("proposal_nodes.gpkg"),
+        Some(&utm_zone_crs),
+        GdalDriverType::GeoPackage.name(),
+    )?;
+    write_features_to_geofile(
+        &topo_result
+            .ground_truth_nodes
+            .par_iter()
+            .map(|node| Feature::from(node))
+            .collect(),
+        &config.data_dir.join("ground_truth_nodes.gpkg"),
+        Some(&utm_zone_crs),
+        GdalDriverType::GeoPackage.name(),
     )?;
     Ok(())
 }
