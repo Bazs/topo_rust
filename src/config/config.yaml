@@ -3,6 +3,12 @@ ground_truth:
   !Geojson
     filepath: ./data/ground_truth.geojson
   # !Osm
+  #   bounding_box: # small area of downtown Tokyo
+  #     left_lon: 139.780237100
+  #     right_lon: 139.784625728
+  #     bottom_lat: 35.673094145
+  #     top_lat: 35.677518721
+  # !Osm
   #   bounding_box: # ~46 square km of downtown Tokyo
   #     left_lon: 139.77451342
   #     right_lon: 139.850199790

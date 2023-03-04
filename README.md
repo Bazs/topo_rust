@@ -7,6 +7,9 @@
 
 ## Building
 
+Besides the rust native dependencies expressed in the Cargo.lock file, the project depends on GDAL version 2.4-3.6 
+being installed locally. See https://gdal.org/download.html for download details for your platform.
+
 Please make sure to build the binary using `cargo build --release`, otherwise the runtime performance will be slow.
 
 ## Usage

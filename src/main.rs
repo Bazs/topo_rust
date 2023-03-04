@@ -3,8 +3,11 @@ pub mod crs;
 pub mod geofile;
 pub mod osm;
 pub mod topo;
-use crate::crs::utm_conversion::{convert_wgs84_lines_to_utm, get_utm_zone_number_for_wgs84_lines};
+use crate::crs::utm_conversion::{
+    convert_wgs84_lines_to_utm, get_utm_zone_for_wgs84_lines, utm_zone_to_crs,
+};
 use crate::geofile::geojson::read_lines_from_geojson;
+use crate::geofile::geopackage::write_lines_to_geopackage;
 use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
 use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
@@ -73,7 +76,7 @@ fn try_main() -> anyhow::Result<()> {
     );
     geofile::geojson::write_lines_to_geojson(&ground_truth_ways, &geojson_dump_filepath)?;
 
-    let utm_zone_number = get_utm_zone_number_for_wgs84_lines(&ground_truth_ways)?;
+    let (utm_zone_number, utm_zone_letter) = get_utm_zone_for_wgs84_lines(&ground_truth_ways)?;
     let ground_truth_ways = convert_wgs84_lines_to_utm(&ground_truth_ways, utm_zone_number);
     let proposal_ways = convert_wgs84_lines_to_utm(&proposal_ways, utm_zone_number);
 
@@ -86,6 +89,15 @@ fn try_main() -> anyhow::Result<()> {
         },
     )?;
     log::info!("{:?}", topo_result.f1_score_result);
+    let utm_zone_crs = utm_zone_to_crs(utm_zone_number, utm_zone_letter, None)?;
+    dbg!(&utm_zone_crs);
+    let ground_truth_nodes_filepath = config.data_dir.join("ground_truth_nodes.gpkg");
+    // TODO write the actual output nodes from the TOPO algorithm instead of the proposal.
+    write_lines_to_geopackage(
+        &proposal_ways,
+        &ground_truth_nodes_filepath,
+        Some(utm_zone_crs),
+    )?;
     Ok(())
 }
 
