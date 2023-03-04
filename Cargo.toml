@@ -21,7 +21,7 @@ kdtree = "0.7.0"
 log = "0.4.17"
 osm-xml = "0.6.2"
 rayon = "1.6.1"
-reqwest = { version = "0.11.14", features = ["blocking"] }
+reqwest = { version = "0.11.14", features = ["blocking"] }  
 rstest = "0.16.0"
 serde = { version = "1.0.152", features = ["serde_derive"] }
 serde_yaml = "0.9.17"

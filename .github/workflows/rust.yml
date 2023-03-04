@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install GDAL
+      run: sudo apt update && sudo apt -y install libgdal30=3.4.1+dfsg-1build4 libgdal-dev=3.4.1+dfsg-1build4
     - name: Build
       run: cargo build
     - name: Run tests
