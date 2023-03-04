@@ -81,6 +81,7 @@ pub fn write_features_to_geofile(
         output_filepath
     );
 
+    // TODO this loops is very slow, investigate the bottleneck with https://github.com/tikv/pprof-rs
     for feature in features {
         let wkb = wkb::geom_to_wkb(&feature.geometry)
             .or_else(|err| Err(anyhow!("Could not write geometry to WKB, {:?}", err)))?;

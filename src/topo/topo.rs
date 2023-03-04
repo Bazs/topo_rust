@@ -79,19 +79,22 @@ pub fn calculate_topo<'a>(
     for (proposal_node, gt_distances_and_indices) in matched_gt_distance_and_idx.iter_mut() {
         for (squared_distance, gt_idx) in gt_distances_and_indices {
             if !matched_gt_ids.contains(gt_idx) {
+                let match_distance = squared_distance.sqrt();
+
                 proposal_node.matched = true;
-                proposal_node.match_distance = Some(squared_distance.sqrt());
-                matched_gt_ids.insert(*gt_idx);
+                proposal_node.match_distance = Some(match_distance);
+
+                let mut gt_node = ground_truth_nodes
+                    .get_mut(**gt_idx as usize)
+                    .ok_or_else(|| anyhow!("No such GT node"))?;
+                gt_node.matched = true;
+                gt_node.match_distance = Some(match_distance);
+                
+                matched_gt_ids.insert(gt_idx);
                 break;
             }
         }
         progress_bar.inc(1);
-    }
-
-    for ground_truth_node in ground_truth_nodes.iter_mut() {
-        if matched_gt_ids.contains(&ground_truth_node.id) {
-            ground_truth_node.matched = true;
-        }
     }
 
     let true_positive_count = matched_gt_ids.len();
