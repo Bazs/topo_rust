@@ -34,6 +34,7 @@ pub fn write_features_to_geofile(
     let layer_type = {
         use gdal::vector::OGRwkbGeometryType::*;
         let geometry = &features.iter().nth(0).unwrap().geometry;
+        // TODO verify that all features have the same geometry type up front.
         match geometry {
             geo::Geometry::Point(_) => wkbPoint,
             geo::Geometry::LineString(_) => wkbLineString,

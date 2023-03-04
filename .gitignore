@@ -5,3 +5,6 @@
 
 # Working data folder
 /data
+
+# VS Code Counter plugin files https://marketplace.visualstudio.com/items?itemName=uctakeoff.vscode-counter
+.VSCodeCounter/
