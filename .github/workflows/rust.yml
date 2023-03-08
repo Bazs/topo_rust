@@ -27,6 +27,9 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+    - name: Get current date
+      id: date
+      run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
     - name: Login to Docker Hub
@@ -38,4 +41,4 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         push: true
-        tags: balazsopra/topo-rust:latest
+        tags: balazsopra/topo-rust:${{ steps.date.outputs.date }}.${{ github.sha }}

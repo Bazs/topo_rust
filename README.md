@@ -16,7 +16,7 @@ Please make sure to build the binary using `cargo build --release`, otherwise th
 
 ## Use the docker image
 
-Check the https://hub.docker.com/repository/docker/balazsopra/topo_rust/general repository for the Docker latest image.
+Check the https://hub.docker.com/repository/docker/balazsopra/topo-rust/general repository for the Docker latest image.
 The executable is in the default work dir inside the image.
 
 ## Running the executable

@@ -1,4 +1,4 @@
-IMAGE_NAME=balazsopra/topo_rust
+IMAGE_NAME=balazsopra/topo-rust
 IMAGE_TAG=$(shell git rev-parse --short HEAD)-$(shell date +'%Y-%m-%d')
 
 .PHONY: docker-build
