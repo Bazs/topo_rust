@@ -1,18 +1,25 @@
 
-[![CI](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml/badge.svg)](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml)
+[![CI - CD](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml/badge.svg)](https://github.com/Bazs/topo_rust/actions/workflows/rust.yml)
 
 ---
 
 # Rust implementation of the TOPO metric
 
-## Building
+To use, either build from source or use the Docker image.
+
+## Build from source
 
 Besides the rust native dependencies expressed in the Cargo.lock file, the project depends on GDAL version 2.4-3.6 
 being installed locally. See https://gdal.org/download.html for download details for your platform.
 
 Please make sure to build the binary using `cargo build --release`, otherwise the runtime performance will be slow.
 
-## Usage
+## Use the docker image
+
+Check the https://hub.docker.com/repository/docker/balazsopra/topo_rust/general repository for the Docker latest image.
+The executable is in the default work dir inside the image.
+
+## Running the executable
 
 The executable is configured via a YAML configuration file.
 
