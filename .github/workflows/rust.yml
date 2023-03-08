@@ -30,6 +30,8 @@ jobs:
     - name: Get current date
       id: date
       run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
     - name: Login to Docker Hub
@@ -40,5 +42,6 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v4
       with:
+        platforms: linux/amd64,linux/arm64
         push: true
         tags: balazsopra/topo-rust:${{ steps.date.outputs.date }}.${{ github.sha }}
