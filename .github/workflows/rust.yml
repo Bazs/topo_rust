@@ -45,9 +45,3 @@ jobs:
         platforms: linux/amd64
         push: true
         tags: balazsopra/topo-rust:${{ steps.date.outputs.date }}.${{ github.sha }}
-    - name: Build and push for arm64
-      uses: docker/build-push-action@v4
-      with:
-        platforms: linux/arm64
-        push: true
-        tags: balazsopra/topo-rust:${{ steps.date.outputs.date }}.${{ github.sha }}
