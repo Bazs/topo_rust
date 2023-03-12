@@ -39,9 +39,15 @@ jobs:
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Build and push
+    - name: Build and push for amd64
       uses: docker/build-push-action@v4
       with:
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
+        push: true
+        tags: balazsopra/topo-rust:${{ steps.date.outputs.date }}.${{ github.sha }}
+    - name: Build and push for arm64
+      uses: docker/build-push-action@v4
+      with:
+        platforms: linux/arm64
         push: true
         tags: balazsopra/topo-rust:${{ steps.date.outputs.date }}.${{ github.sha }}
