@@ -12,6 +12,7 @@ approx = "0.5.1"
 clap = { version = "4.1.4", features = ["derive"] }
 env_logger = "0.10.0"
 gdal = "0.14.0"
+gdal-sys = "0.8.0"
 geo = "0.23.1"
 geohash = "0.13.0"
 geojson = "0.24.0"

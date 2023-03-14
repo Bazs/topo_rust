@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context};
 use gdal::vector::LayerAccess;
+use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::{collections::HashSet, path::Path};
 
@@ -68,6 +69,7 @@ pub fn write_features_to_geofile(
     let mut layer = dataset.create_layer(layer_options)?;
 
     // Create the fields based on all attributes of all features.
+    log::info!("Setting up fields");
     let field_names = get_field_names(features);
     let field_definitions: Vec<(&str, gdal::vector::OGRFieldType::Type)> = field_names
         .iter()
@@ -80,8 +82,12 @@ pub fn write_features_to_geofile(
         features.len(),
         output_filepath
     );
-
-    // TODO this loops is very slow, investigate the bottleneck with https://github.com/tikv/pprof-rs
+    unsafe {
+        // Start a transaction in case the driver supports transactions, e.g. GeoPackage.
+        // Committing all features once as opposed to per-feature is a massive speedup for these drivers.
+        gdal_sys::OGR_L_StartTransaction(layer.c_layer());
+    };
+    let bar = ProgressBar::new(features.len() as u64);
     for feature in features {
         let wkb = wkb::geom_to_wkb(&feature.geometry)
             .or_else(|err| Err(anyhow!("Could not write geometry to WKB, {:?}", err)))?;
@@ -100,7 +106,13 @@ pub fn write_features_to_geofile(
             }
             None => layer.create_feature(geometry)?,
         }
+
+        bar.inc(1);
     }
+    unsafe {
+        // Start a transaction in case the driver supports transactions.
+        gdal_sys::OGR_L_CommitTransaction(layer.c_layer());
+    };
     Ok(())
 }
 

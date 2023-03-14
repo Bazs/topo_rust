@@ -1550,6 +1550,7 @@ dependencies = [
  "clap",
  "env_logger",
  "gdal",
+ "gdal-sys",
  "geo",
  "geohash",
  "geojson",
