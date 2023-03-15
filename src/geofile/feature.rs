@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct Feature {
     pub geometry: geo::Geometry,
     // TODO support different value types besides String. See gdal::vector::OGRFieldType for types

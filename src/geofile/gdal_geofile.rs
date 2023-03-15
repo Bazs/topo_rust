@@ -127,3 +127,65 @@ fn get_field_names(features: &Vec<Feature>) -> Vec<String> {
         .collect();
     fields.into_iter().collect()
 }
+
+pub fn read_features_from_geofile(
+    filepath: &Path,
+) -> anyhow::Result<(Vec<Feature>, gdal::spatial_ref::SpatialRef)> {
+    gdal::DriverManager::register_all();
+    let mut open_options = gdal::DatasetOptions::default();
+    open_options.open_flags = gdal::GdalOpenFlags::GDAL_OF_VECTOR;
+    let dataset = gdal::Dataset::open_ex(filepath, open_options)?;
+
+    let layer_count = dataset.layer_count();
+    if 0 == layer_count || 1 < layer_count {
+        return Err(anyhow!(
+            "Found {} layers, only one layer is supported.",
+            layer_count
+        ));
+    }
+    let mut layer = dataset.layer(0)?;
+    for gdal_feature in layer.features() {
+        for field in gdal_feature.fields() {}
+    }
+
+    todo!();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use rstest::rstest;
+    use testdir::testdir;
+
+    use crate::geofile::{
+        feature::Feature,
+        gdal_geofile::{read_features_from_geofile, write_features_to_geofile, GdalDriverType},
+    };
+
+    #[rstest]
+    #[should_panic] // TODO implement the reading function so it does not panic.
+    fn test_geofile_write_read_round_trip() {
+        let features = vec![Feature {
+            geometry: geo::Geometry::Point(geo::Point::new(80.0, 45.0)),
+            attributes: Some(HashMap::from([
+                ("key1".to_string(), "value1".to_string()),
+                ("key2".to_string(), "other value".to_string()),
+            ])),
+        }];
+
+        let test_dir = testdir!();
+        let geofile_filepath = test_dir.join("output.gpkg");
+
+        let spatial_ref = gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap();
+
+        write_features_to_geofile(
+            &features,
+            &geofile_filepath,
+            Some(&spatial_ref),
+            GdalDriverType::GeoPackage.name(),
+        )
+        .unwrap();
+        read_features_from_geofile(&geofile_filepath).unwrap();
+    }
+}
