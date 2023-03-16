@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::anyhow;
+use gdal::vector::FieldValue;
 use geo::{CoordsIter, EuclideanLength};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use kdtree::distance::squared_euclidean;
@@ -89,7 +90,7 @@ pub fn calculate_topo<'a>(
                     .ok_or_else(|| anyhow!("No such GT node"))?;
                 gt_node.matched = true;
                 gt_node.match_distance = Some(match_distance);
-                
+
                 matched_gt_ids.insert(gt_idx);
                 break;
             }
@@ -122,32 +123,34 @@ struct RoadPoint {
 
 pub struct TopoNode {
     road_point: RoadPoint,
-    id: i64,
+    id: i32,
     matched: bool,
     match_distance: Option<f64>,
 }
 
 impl From<&TopoNode> for Feature {
     fn from(node: &TopoNode) -> Self {
+        let mut attributes = HashMap::new();
+        attributes.insert("id".to_string(), FieldValue::IntegerValue(node.id));
+        attributes.insert(
+            "matched".to_string(),
+            FieldValue::StringValue(node.matched.to_string()),
+        );
+        if let Some(distance) = node.match_distance {
+            attributes.insert(
+                "match_distance".to_string(),
+                FieldValue::RealValue(distance),
+            );
+        }
         Self {
             geometry: geo::Geometry::Point(geo::Point::from(node.road_point.coord)),
-            attributes: Some(HashMap::from([
-                ("id".to_string(), node.id.to_string()),
-                ("matched".to_string(), node.matched.to_string()),
-                (
-                    "match_distance".to_string(),
-                    match node.match_distance {
-                        Some(distance) => distance.to_string(),
-                        None => "".to_string(),
-                    },
-                ),
-            ])),
+            attributes: Some(attributes),
         }
     }
 }
 
 impl TopoNode {
-    fn new(point: RoadPoint, id: i64) -> Self {
+    fn new(point: RoadPoint, id: i32) -> Self {
         TopoNode {
             road_point: point,
             id: id,
@@ -159,7 +162,7 @@ impl TopoNode {
 
 fn build_kdtree_from_nodes(
     topo_nodes: &Vec<TopoNode>,
-) -> anyhow::Result<kdtree::KdTree<f64, i64, [f64; 2]>> {
+) -> anyhow::Result<kdtree::KdTree<f64, i32, [f64; 2]>> {
     let mut kdtree = kdtree::KdTree::with_capacity(2, topo_nodes.len());
     for node in topo_nodes {
         kdtree.add(<[f64; 2]>::from(node.road_point.coord), node.id)?;
@@ -171,7 +174,7 @@ fn road_points_to_topo_nodes(road_points: Vec<RoadPoint>) -> Vec<TopoNode> {
     road_points
         .into_iter()
         .enumerate()
-        .map(|(idx, road_point)| TopoNode::new(road_point, idx as i64))
+        .map(|(idx, road_point)| TopoNode::new(road_point, idx as i32))
         .collect()
 }
 

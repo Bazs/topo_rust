@@ -1,8 +1,14 @@
 use anyhow::{anyhow, Context};
+use gdal::vector::FieldValue;
 use gdal::vector::LayerAccess;
 use indicatif::ProgressBar;
 use rayon::prelude::*;
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::format,
+    hash::Hash,
+    path::Path,
+};
 
 use super::feature::Feature;
 
@@ -20,6 +26,12 @@ impl GdalDriverType {
     }
 }
 
+/// Write features to a geofile.
+///
+/// # Arguments
+/// * features - The features to write. NOTE: all features will be written as string regardless of their type.
+/// * crs - The CRS to set for the geofile. Defaults to EPSG:4326 if None.
+/// * driver - Name of the GDAL driver to use. GdalDriverType has some options.
 pub fn write_features_to_geofile(
     features: &Vec<Feature>,
     output_filepath: &Path,
@@ -53,7 +65,7 @@ pub fn write_features_to_geofile(
 
     let crs = match crs {
         Some(crs) => crs.clone(),
-        None => gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap(),
+        None => get_default_spatial_ref(),
     };
     let crs_name = crs.name()?;
     log::debug!("Using spatial ref {} for writing geofile", crs_name);
@@ -99,7 +111,7 @@ pub fn write_features_to_geofile(
                 let mut values = Vec::new();
                 for (key, value) in attributes {
                     field_names.push(key);
-                    values.push(gdal::vector::FieldValue::StringValue(value.to_owned()))
+                    values.push(value.to_owned())
                 }
                 let field_names: Vec<&str> = field_names.iter().map(|name| name as &str).collect();
                 layer.create_feature_fields(geometry, &field_names, &values)?;
@@ -114,18 +126,6 @@ pub fn write_features_to_geofile(
         gdal_sys::OGR_L_CommitTransaction(layer.c_layer());
     };
     Ok(())
-}
-
-fn get_field_names(features: &Vec<Feature>) -> Vec<String> {
-    let fields: HashSet<String> = features
-        .par_iter()
-        .filter_map(|feature| match &feature.attributes {
-            Some(attributes) => Some(attributes.keys().cloned().collect::<Vec<String>>()),
-            None => None,
-        })
-        .flatten()
-        .collect();
-    fields.into_iter().collect()
 }
 
 pub fn read_features_from_geofile(
@@ -144,17 +144,64 @@ pub fn read_features_from_geofile(
         ));
     }
     let mut layer = dataset.layer(0)?;
+
+    let mut features = Vec::new();
+    features.reserve(layer.feature_count() as usize);
+
+    log::info!("Reading {} features", layer.feature_count());
+
     for gdal_feature in layer.features() {
-        for field in gdal_feature.fields() {}
+        let attributes: HashMap<String, FieldValue> = gdal_feature
+            .fields()
+            .into_iter()
+            .filter_map(|(field_name, field_value)| {
+                if let Some(value) = field_value {
+                    return Some((field_name, value));
+                }
+                return None;
+            })
+            .collect();
+        let wkb = gdal_feature.geometry().wkb()?;
+        let geometry = wkb::wkb_to_geom(&mut wkb.as_slice())
+            .or_else(|err| Err(anyhow!("Could not parse geometry from WKB, {:?}", err)))?;
+        let attributes = if attributes.is_empty() {
+            None
+        } else {
+            Some(attributes)
+        };
+
+        features.push(Feature {
+            geometry: geometry,
+            attributes: attributes,
+        });
     }
 
-    todo!();
+    let spatial_ref = layer.spatial_ref().unwrap_or(get_default_spatial_ref());
+
+    return Ok((features, spatial_ref));
+}
+
+fn get_default_spatial_ref() -> gdal::spatial_ref::SpatialRef {
+    gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap()
+}
+
+fn get_field_names(features: &Vec<Feature>) -> Vec<String> {
+    let fields: HashSet<String> = features
+        .par_iter()
+        .filter_map(|feature| match &feature.attributes {
+            Some(attributes) => Some(attributes.keys().cloned().collect::<Vec<String>>()),
+            None => None,
+        })
+        .flatten()
+        .collect();
+    fields.into_iter().collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, iter::zip};
 
+    use gdal::vector::FieldValue;
     use rstest::rstest;
     use testdir::testdir;
 
@@ -164,18 +211,25 @@ mod tests {
     };
 
     #[rstest]
-    #[should_panic] // TODO implement the reading function so it does not panic.
-    fn test_geofile_write_read_round_trip() {
+    #[case(GdalDriverType::GeoJson)]
+    #[case(GdalDriverType::GeoPackage)]
+    fn test_geofile_write_read_round_trip(#[case] driver: GdalDriverType) {
         let features = vec![Feature {
             geometry: geo::Geometry::Point(geo::Point::new(80.0, 45.0)),
             attributes: Some(HashMap::from([
-                ("key1".to_string(), "value1".to_string()),
-                ("key2".to_string(), "other value".to_string()),
+                (
+                    "key1".to_string(),
+                    FieldValue::StringValue("value1".to_string()),
+                ),
+                (
+                    "key2".to_string(),
+                    FieldValue::StringValue("56.0".to_string()),
+                ),
             ])),
         }];
 
         let test_dir = testdir!();
-        let geofile_filepath = test_dir.join("output.gpkg");
+        let geofile_filepath = test_dir.join("output.file");
 
         let spatial_ref = gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap();
 
@@ -183,9 +237,17 @@ mod tests {
             &features,
             &geofile_filepath,
             Some(&spatial_ref),
-            GdalDriverType::GeoPackage.name(),
+            driver.name(),
         )
         .unwrap();
-        read_features_from_geofile(&geofile_filepath).unwrap();
+        let (read_features, read_spatial_ref) =
+            read_features_from_geofile(&geofile_filepath).unwrap();
+
+        for (feature, read_feature) in zip(features, read_features) {
+            assert_eq!(feature, read_feature);
+        }
+        let read_spatial_ref_name = read_spatial_ref.name().unwrap();
+        let spatial_ref_name = spatial_ref.name().unwrap();
+        assert_eq!(read_spatial_ref_name, spatial_ref_name);
     }
 }
