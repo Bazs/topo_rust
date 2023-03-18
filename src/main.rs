@@ -4,7 +4,7 @@ pub mod geofile;
 pub mod osm;
 pub mod topo;
 use crate::crs::utm_conversion::{
-    convert_wgs84_lines_to_utm, get_utm_zone_for_wgs84_lines, utm_zone_to_crs,
+    convert_wgs84_lines_to_utm, get_utm_zone_for_wgs84_lines, utm_zone_to_spatial_ref,
 };
 use crate::geofile::feature::Feature;
 use crate::geofile::gdal_geofile::{write_features_to_geofile, GdalDriverType};
@@ -91,7 +91,7 @@ fn try_main() -> anyhow::Result<()> {
         },
     )?;
     log::info!("{:?}", topo_result.f1_score_result);
-    let utm_zone_crs = utm_zone_to_crs(utm_zone_number, utm_zone_letter, None)?;
+    let utm_zone_crs = utm_zone_to_spatial_ref(utm_zone_number, utm_zone_letter, None)?;
     write_features_to_geofile(
         &topo_result
             .proposal_nodes
