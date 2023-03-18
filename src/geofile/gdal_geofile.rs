@@ -5,8 +5,6 @@ use indicatif::ProgressBar;
 use rayon::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
-    fmt::format,
-    hash::Hash,
     path::Path,
 };
 
@@ -138,6 +136,7 @@ pub fn read_features_from_geofile(
 
     let layer_count = dataset.layer_count();
     if 0 == layer_count || 1 < layer_count {
+        // Note: in principle any amount of layers could be read in a loop, their features combined into one collection. Implement if necessary.
         return Err(anyhow!(
             "Found {} layers, only one layer is supported.",
             layer_count

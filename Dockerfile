@@ -12,8 +12,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh && \
   apt-get update && apt-get install -y build-essential pkg-config \
   libssl-dev libtiff-dev libsqlite3-dev libcurl4-openssl-dev libclang-dev libproj-dev
 
-# Add code
+# Add code and run unit tests
 ADD . .
+RUN ~/.cargo/bin/cargo test --release
 
 # builder stage which builds the executable in release mode.
 FROM tester as builder
