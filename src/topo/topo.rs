@@ -25,6 +25,7 @@ pub struct TopoResult {
     pub proposal_nodes: Vec<TopoNode>,
 }
 
+#[derive(serde::Deserialize, Debug)]
 pub struct TopoParams {
     pub resampling_distance: f64,
     pub hole_radius: f64,
@@ -189,6 +190,7 @@ fn sample_points_on_lines(
         .collect()
 }
 
+/// Sample points on a linestring every resampling_distance, starting from the first coordinate of the linestring.
 fn sample_points_on_line(linestr: &geo::LineString, resampling_distance: f64) -> Vec<RoadPoint> {
     if 2 > linestr.coords_count() {
         return vec![];
@@ -196,11 +198,6 @@ fn sample_points_on_line(linestr: &geo::LineString, resampling_distance: f64) ->
     if resampling_distance <= 0.0 {
         return vec![];
     }
-
-    // Calculate equidistant split points maintaining the same number of splits.
-    let linestr_len = linestr.euclidean_length();
-    let num_parts = (linestr_len / resampling_distance) as i64;
-    let resampling_distance = linestr_len / num_parts as f64;
 
     let mut output_points = vec![RoadPoint {
         coord: *linestr.coords().nth(0).unwrap(),
@@ -281,9 +278,9 @@ mod tests {
 
     #[rstest]
     #[case(vec![(0.0, 0.0), (10.0, 0.0)], 5.0, vec![(0.0, 0.0), (5.0, 0.0), (10.0, 0.0)])] // Split exactly in two.
-    #[case(vec![(0.0, 0.0), (9.0, 0.0)], 4.0, vec![(0.0, 0.0), (4.5, 0.0), (9.0, 0.0)])] // Split exactly in two, float.
-    #[case(vec![(0.0, 0.0), (12.0, 0.0)], 5.0, vec![(0.0, 0.0), (6.0, 0.0), (12.0, 0.0)])] // Split in two with leeway.
+    #[case(vec![(0.0, 0.0), (9.0, 0.0)], 4.5, vec![(0.0, 0.0), (4.5, 0.0), (9.0, 0.0)])] // Split exactly in two, float.
     #[case(vec![(0.0, 0.0), (9.0, 0.0)], 3.0, vec![(0.0, 0.0), (3.0, 0.0), (6.0, 0.0), (9.0, 0.0)])] // Split exactly in three.
+    #[case(vec![(0.0, 0.0), (12.0, 0.0)], 5.0, vec![(0.0, 0.0), (5.0, 0.0), (10.0, 0.0), (12.0, 0.0)])] // Split in three with leeway.
     #[case(vec![(0.0, 0.0), (10.0, 0.0)], 10.0, vec![(0.0, 0.0), (10.0, 0.0)])] // Split by length.
     #[case(vec![(0.0, 0.0), (10.0, 0.0)], 11.0, vec![(0.0, 0.0), (10.0, 0.0)])] // Split by more than length.
     #[case(vec![(0.0, 0.0), (10.0, 0.0)], 0.0, vec![])] // Split by zero.
@@ -311,8 +308,8 @@ mod tests {
     #[fixture]
     fn default_topo_params() -> TopoParams {
         TopoParams {
-            hole_radius: 6.0,
             resampling_distance: 11.0,
+            hole_radius: 6.0,
         }
     }
 
@@ -322,11 +319,11 @@ mod tests {
         precision: 1.0,
         recall: 1.0
     })] // Perfectly matching lines.
-    #[case(vec![(0.0, 0.0), (5.0, 0.0), (11.0, 0.0)], vec![(0.0, 0.0), (5.0, 0.0), (20.0, 0.0)], F1ScoreResult {
-        f1_score: 0.5,
-        precision: 0.5,
-        recall: 0.5
-    })] // One line endpoint out of match range.
+    #[case(vec![(0.0, 0.0), (6.0, 0.0)], vec![(0.0, 0.0), (6.0, 0.0), (12.0, 0.0)], F1ScoreResult {
+        f1_score: 4.0 / 5.0,
+        precision: 1.0,
+        recall: 2.0 / 3.0
+    })] // Two points match, one GT point is unmatched.
     fn test_calculate_topo_two_lines(
         #[case] proposal_line_coords: Vec<(f64, f64)>,
         #[case] ground_truth_line_coods: Vec<(f64, f64)>,

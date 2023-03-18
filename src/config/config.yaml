@@ -14,4 +14,7 @@ ground_truth:
   #     right_lon: 139.850199790
   #     bottom_lat: 35.650358475
   #     top_lat: 35.71006819
+topo_params:
+  resampling_distance: 11.0
+  hole_radius: 6.0
 data_dir: ./data

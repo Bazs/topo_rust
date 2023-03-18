@@ -34,6 +34,7 @@ enum GroundTruthConfig {
 struct Config {
     proposal_geofile_path: PathBuf,
     ground_truth: GroundTruthConfig,
+    topo_params: TopoParams,
     data_dir: PathBuf,
 }
 
@@ -97,10 +98,7 @@ fn try_main() -> anyhow::Result<()> {
     let topo_result = calculate_topo(
         &proposal_georef_lines.lines,
         &ground_truth_georef_lines.lines,
-        &TopoParams {
-            resampling_distance: 11.0,
-            hole_radius: 7.0,
-        },
+        &config.topo_params,
     )?;
     log::info!("{:?}", topo_result.f1_score_result);
     write_features_to_geofile(
