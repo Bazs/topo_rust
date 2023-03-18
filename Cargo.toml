@@ -29,5 +29,4 @@ rstest = "0.16.0"
 serde = { version = "1.0.152", features = ["serde_derive"] }
 serde_yaml = "0.9.17"
 testdir = "0.7.3"
-utm = "0.1.6"
 wkb = "0.7.1"

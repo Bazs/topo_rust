@@ -1,6 +1,6 @@
-proposal_geojson_path: ./data/ground_truth.geojson  # Put your own file here.
+proposal_geofile_path: ./data/ground_truth.geojson  # Put your own file here.
 ground_truth:
-  !Geojson
+  !Geofile
     filepath: ./data/ground_truth.geojson
   # !Osm
   #   bounding_box: # small area of downtown Tokyo

@@ -3,13 +3,10 @@ pub mod crs;
 pub mod geofile;
 pub mod osm;
 pub mod topo;
-use crate::crs::utm_conversion::{
-    convert_wgs84_lines_to_utm, get_utm_zone_for_wgs84_lines, utm_zone_to_spatial_ref,
-};
 use crate::geofile::feature::Feature;
 use crate::geofile::gdal_geofile::{write_features_to_geofile, GdalDriverType};
-use crate::geofile::geojson::read_lines_from_geojson;
 use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
+use crate::topo::georef_lines::{read_lines_from_geofile, GeoreferencedLines};
 use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
 use clap::Parser;
@@ -29,18 +26,18 @@ struct Args {
 
 #[derive(Deserialize, Debug)]
 enum GroundTruthConfig {
-    Geojson { filepath: PathBuf },
+    Geofile { filepath: PathBuf },
     Osm { bounding_box: WgsBoundingBox },
 }
 
 #[derive(Deserialize, Debug)]
 struct Config {
-    proposal_geojson_path: PathBuf,
+    proposal_geofile_path: PathBuf,
     ground_truth: GroundTruthConfig,
     data_dir: PathBuf,
 }
 
-fn get_ground_truth_from_osm(
+fn get_ground_truth_ways_from_osm(
     bounding_box: &WgsBoundingBox,
     data_dir: &PathBuf,
 ) -> anyhow::Result<Vec<geo::LineString>> {
@@ -62,36 +59,50 @@ fn try_main() -> anyhow::Result<()> {
     let config_contents = read_to_string(args.config_filepath)?;
     let config: Config = serde_yaml::from_str(&config_contents)?;
 
-    let ground_truth_ways = match config.ground_truth {
+    let mut ground_truth_georef_lines = match config.ground_truth {
         GroundTruthConfig::Osm { bounding_box } => {
-            get_ground_truth_from_osm(&bounding_box, &config.data_dir)?
+            let ground_truth_ways =
+                get_ground_truth_ways_from_osm(&bounding_box, &config.data_dir)?;
+            GeoreferencedLines {
+                lines: ground_truth_ways,
+                spatial_ref: gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap(),
+            }
         }
-        GroundTruthConfig::Geojson { filepath } => read_lines_from_geojson(&filepath)?,
+        GroundTruthConfig::Geofile { filepath } => read_lines_from_geofile(&filepath)?,
     };
-    log::info!("Read {} ground truth edges", ground_truth_ways.len());
-    let proposal_ways = read_lines_from_geojson(&config.proposal_geojson_path)?;
-    log::info!("Read {} proposal edges", proposal_ways.len());
+    log::info!(
+        "Read {} ground truth edges",
+        ground_truth_georef_lines.lines.len()
+    );
+
+    let mut proposal_georef_lines = read_lines_from_geofile(&config.proposal_geofile_path)?;
+    log::info!("Read {} proposal edges", proposal_georef_lines.lines.len());
     let geojson_dump_filepath = config.data_dir.join("ground_truth.geojson");
+
+    // Write the ground truth to file for reference.
     log::info!(
         "Writing ground truth edges to GeoJSON to {:?}",
         &geojson_dump_filepath
     );
-    geofile::geojson::write_lines_to_geojson(&ground_truth_ways, &geojson_dump_filepath)?;
+    geofile::geojson::write_lines_to_geojson(
+        &ground_truth_georef_lines.lines,
+        &geojson_dump_filepath,
+    )?;
 
-    let (utm_zone_number, utm_zone_letter) = get_utm_zone_for_wgs84_lines(&ground_truth_ways)?;
-    let ground_truth_ways = convert_wgs84_lines_to_utm(&ground_truth_ways, utm_zone_number);
-    let proposal_ways = convert_wgs84_lines_to_utm(&proposal_ways, utm_zone_number);
+    topo::preprocessing::ensure_gt_proposal_same_projected_crs(
+        &mut ground_truth_georef_lines,
+        &mut proposal_georef_lines,
+    )?;
 
     let topo_result = calculate_topo(
-        &proposal_ways,
-        &ground_truth_ways,
+        &proposal_georef_lines.lines,
+        &ground_truth_georef_lines.lines,
         &TopoParams {
             resampling_distance: 11.0,
             hole_radius: 7.0,
         },
     )?;
     log::info!("{:?}", topo_result.f1_score_result);
-    let utm_zone_crs = utm_zone_to_spatial_ref(utm_zone_number, utm_zone_letter, None)?;
     write_features_to_geofile(
         &topo_result
             .proposal_nodes
@@ -99,7 +110,7 @@ fn try_main() -> anyhow::Result<()> {
             .map(|node| Feature::from(node))
             .collect(),
         &config.data_dir.join("proposal_nodes.gpkg"),
-        Some(&utm_zone_crs),
+        Some(&proposal_georef_lines.spatial_ref),
         GdalDriverType::GeoPackage.name(),
     )?;
     write_features_to_geofile(
@@ -109,7 +120,7 @@ fn try_main() -> anyhow::Result<()> {
             .map(|node| Feature::from(node))
             .collect(),
         &config.data_dir.join("ground_truth_nodes.gpkg"),
-        Some(&utm_zone_crs),
+        Some(&ground_truth_georef_lines.spatial_ref),
         GdalDriverType::GeoPackage.name(),
     )?;
     Ok(())
