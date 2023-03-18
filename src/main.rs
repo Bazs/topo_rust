@@ -15,7 +15,7 @@ use serde::Deserialize;
 use std::path::PathBuf;
 use std::{fs::read_to_string, path::Path};
 
-/// Simple program to greet a person
+/// Calculate the TOPO metric over a ground truth and a proposal road map.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
