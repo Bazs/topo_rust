@@ -3,7 +3,7 @@
 
 ---
 
-# Rust implementation of the TOPO metric
+# Rust implementation of the TOPO metric - Work in progress
 
 There are several ways to use and develop the tool.
 
@@ -81,6 +81,15 @@ data_dir: ./data
 ## Algorithm description
 
 See [[1]](#references), section 5.2.1 for a detailed description of the algorithm.
+
+### Missing algorithm steps
+
+Not all steps are implemented in the algorithm currently.
+
+Steps which are missing:
+* Preprocessing: make sure all linestrings point outward from the graph center.
+* Deduplication: ensure that only one hole/marble exists per location. Currently if two lines end at the same point,
+two holes/marbles are created.
 
 ## References
 
