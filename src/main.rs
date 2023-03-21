@@ -1,6 +1,7 @@
 extern crate log;
 pub mod crs;
 pub mod geofile;
+pub mod geograph;
 pub mod osm;
 pub mod topo;
 use crate::geofile::feature::Feature;
