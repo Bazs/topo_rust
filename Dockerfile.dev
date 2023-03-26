@@ -1,0 +1,13 @@
+# This container is meant to be used with GitHub Codespaces.
+FROM ubuntu:22.10
+
+WORKDIR /usr/local/build
+
+# Install cc, pkg-config, and dependencies for linking against PROJ.
+RUN apt-get update && apt-get install -y build-essential pkg-config \
+  libproj-dev libgdal-dev curl libclang-dev
+# Install Rust.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh && \
+  chmod +x rustup.sh && \
+  ./rustup.sh -y && \
+  rm ./rustup.sh 
