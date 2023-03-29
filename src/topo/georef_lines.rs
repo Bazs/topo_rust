@@ -9,6 +9,7 @@ use crate::{
     geofile::gdal_geofile::read_features_from_geofile,
 };
 
+// TODO remove this struct in favor of a GeoFeatureGraph
 pub struct GeoreferencedLines {
     pub lines: Vec<geo::LineString>,
     pub spatial_ref: gdal::spatial_ref::SpatialRef,

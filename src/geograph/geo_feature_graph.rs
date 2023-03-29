@@ -1,7 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
-    geofile::feature::{Feature, FeatureMap},
+    geofile::{
+        feature::{Feature, FeatureMap},
+        gdal_geofile::read_features_from_geofile,
+    },
     geograph,
 };
 
@@ -32,5 +35,14 @@ impl<Ty: petgraph::EdgeType> TryFrom<Vec<Feature>> for GeoFeatureGraph<Ty> {
             )
         }
         geograph::utils::build_geograph_from_lines_with_data(lines, data)
+    }
+}
+
+impl<Ty: petgraph::EdgeType> GeoFeatureGraph<Ty> {
+    pub fn load_from_geofile(filepath: &PathBuf) -> anyhow::Result<Self> {
+        let (features, spatial_ref) = read_features_from_geofile(filepath)?;
+        let mut graph: GeoFeatureGraph<Ty> = features.try_into()?;
+        graph.crs = spatial_ref;
+        Ok(graph)
     }
 }

@@ -72,7 +72,7 @@ pub type NodeMap<N> = HashMap<NodeIdx, GeoNode<N>>;
 pub struct GeoGraph<E: Default, N: Default, Ty: petgraph::EdgeType> {
     edge_graph: EdgeGraph<E, Ty>,
     node_map: NodeMap<N>,
-    crs: gdal::spatial_ref::SpatialRef,
+    pub crs: gdal::spatial_ref::SpatialRef,
 }
 
 impl<E: Default, N: Default, Ty: petgraph::EdgeType> GeoGraph<E, N, Ty> {
