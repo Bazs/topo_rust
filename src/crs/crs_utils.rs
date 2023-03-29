@@ -11,6 +11,10 @@ use anyhow::anyhow;
 
 pub type EpsgCode = u32;
 
+pub fn epsg_4326() -> gdal::spatial_ref::SpatialRef {
+    gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap()
+}
+
 /// Query UTM zones which contain the lon/lat WGS84 coordinate.
 ///
 /// # Arguments

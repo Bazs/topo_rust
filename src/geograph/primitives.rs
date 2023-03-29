@@ -63,7 +63,7 @@ pub type EdgeGraph<E, Ty> = petgraph::graphmap::GraphMap<NodeIdx, Vec<GeoEdge<E>
 pub type NodeMap<N> = HashMap<NodeIdx, GeoNode<N>>;
 
 /// Geospatial graph. Edges are stored in a map-based graph, which is indexed by start and end node indices.
-/// Data associated with nodes is stored in a map.
+/// Data associated with nodes is stored in a map. The `crs` member defines the coordinate reference system.
 ///
 /// Parameters:
 /// - `E`: the data type associated with edges.
@@ -72,14 +72,16 @@ pub type NodeMap<N> = HashMap<NodeIdx, GeoNode<N>>;
 pub struct GeoGraph<E: Default, N: Default, Ty: petgraph::EdgeType> {
     edge_graph: EdgeGraph<E, Ty>,
     node_map: NodeMap<N>,
+    crs: gdal::spatial_ref::SpatialRef,
 }
 
 impl<E: Default, N: Default, Ty: petgraph::EdgeType> GeoGraph<E, N, Ty> {
     /// Create an empty graph.
-    pub fn new() -> Self {
+    pub fn new(crs: gdal::spatial_ref::SpatialRef) -> Self {
         Self {
             edge_graph: EdgeGraph::new(),
             node_map: HashMap::new(),
+            crs: crs,
         }
     }
 
@@ -97,6 +99,16 @@ impl<E: Default, N: Default, Ty: petgraph::EdgeType> GeoGraph<E, N, Ty> {
         end_node_idx: NodeIdx,
         geometry: geo::LineString,
     ) -> anyhow::Result<()> {
+        self.insert_edge_with_data(start_node_idx, end_node_idx, geometry, E::default())
+    }
+
+    pub fn insert_edge_with_data(
+        &mut self,
+        start_node_idx: NodeIdx,
+        end_node_idx: NodeIdx,
+        geometry: geo::LineString,
+        data: E,
+    ) -> anyhow::Result<()> {
         if 2 > geometry.coords().count() {
             return Err(anyhow!("Cannot insert edge with less than two points"));
         }
@@ -112,10 +124,13 @@ impl<E: Default, N: Default, Ty: petgraph::EdgeType> GeoGraph<E, N, Ty> {
             .edge_weight_mut(start_node_idx, end_node_idx)
         {
             // TODO consider having a "parallel edge idx" in the function signature and check if that parallel edge idx exsits already.
-            edge_vec.push(GeoEdge::new(geometry))
+            edge_vec.push(GeoEdge::new_with_data(geometry, data))
         } else {
-            self.edge_graph
-                .add_edge(start_node_idx, end_node_idx, vec![GeoEdge::new(geometry)]);
+            self.edge_graph.add_edge(
+                start_node_idx,
+                end_node_idx,
+                vec![GeoEdge::new_with_data(geometry, data)],
+            );
         }
 
         Ok(())
