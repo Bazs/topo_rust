@@ -1,6 +1,9 @@
-use crate::crs::crs_utils::{epsg_code_to_authority_string, EpsgCode};
+use crate::{
+    crs::crs_utils::{epsg_code_to_authority_string, EpsgCode},
+    topo::georef_lines::get_utm_zone_for_lines,
+};
 
-use super::georef_lines::{get_utm_zone_for_lines, project_lines, GeoreferencedLines};
+use super::georef_lines::{project_lines, GeoreferencedLines};
 
 pub fn ensure_gt_proposal_same_projected_crs(
     gt_georef_lines: &mut GeoreferencedLines,

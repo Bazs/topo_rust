@@ -7,6 +7,7 @@ use proj::Transform;
 use crate::{
     crs::crs_utils::{epsg_code_to_authority_string, query_utm_crs_info},
     geofile::gdal_geofile::read_features_from_geofile,
+    geograph::primitives::GeoGraph,
 };
 
 // TODO remove this struct in favor of a GeoFeatureGraph
@@ -35,6 +36,7 @@ pub fn read_lines_from_geofile(filepath: &PathBuf) -> anyhow::Result<Georeferenc
     Ok(GeoreferencedLines { lines, spatial_ref })
 }
 
+// TODO remove when GeoreferencedLines is removed.
 pub fn get_utm_zone_for_lines(
     georeferenced_lines: &GeoreferencedLines,
 ) -> anyhow::Result<gdal::spatial_ref::SpatialRef> {
@@ -60,6 +62,30 @@ pub fn get_utm_zone_for_lines(
         None => {
             return Err(anyhow!(
                 "Could not determine UTM zone for ground truth lines"
+            ))
+        }
+    }
+}
+
+pub fn get_utm_zone_for_graph<E: Default, N: Default, Ty: petgraph::EdgeType>(
+    geograph: &GeoGraph<E, N, Ty>,
+) -> anyhow::Result<gdal::spatial_ref::SpatialRef> {
+    if !geograph.crs.is_geographic() {
+        return Err(anyhow!("The lines are not in a geographic CRS."));
+    }
+    match geograph.node_map().values().nth(0) {
+        Some(node) => {
+            let utm_zone_codes =
+                query_utm_crs_info(node.geometry.x(), node.geometry.y(), Some("WGS84"))?;
+            let utm_zone_code = utm_zone_codes
+                .get(0)
+                .ok_or_else(|| (anyhow!("No UTM zones found for graph")))?;
+            gdal::spatial_ref::SpatialRef::from_epsg(*utm_zone_code)
+                .map_err(|err| anyhow!("Could not create SpatialRef from EPSG code. {}", err))
+        }
+        None => {
+            return Err(anyhow!(
+                "Could not determine UTM zone for graph because it has no nodes."
             ))
         }
     }

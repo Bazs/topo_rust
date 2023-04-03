@@ -89,8 +89,16 @@ impl<E: Default, N: Default, Ty: petgraph::EdgeType> GeoGraph<E, N, Ty> {
         &self.edge_graph
     }
 
+    pub fn edge_graph_mut(&mut self) -> &mut EdgeGraph<E, Ty> {
+        &mut self.edge_graph
+    }
+
     pub fn node_map(&self) -> &NodeMap<N> {
         &self.node_map
+    }
+
+    pub fn node_map_mut(&mut self) -> &mut NodeMap<N> {
+        &mut self.node_map
     }
 
     pub fn insert_edge(
