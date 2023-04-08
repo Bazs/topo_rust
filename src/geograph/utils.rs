@@ -1,8 +1,9 @@
 use std::iter::zip;
 
-use crate::crs::crs_utils::epsg_4326;
+use crate::crs::crs_utils::{epsg_4326, epsg_code_to_authority_string};
 
 use anyhow::anyhow;
+use proj::Transform;
 
 use super::primitives::{GeoGraph, NodeIdx};
 
@@ -33,8 +34,7 @@ impl NodeIndexer {
     }
 }
 
-/// Build a topologically correct GeoGraph from given linestrings. Edge data may be provided via `data`
-/// otherwise it's initialized to defaults, node data is initialized to defaults.
+/// Build a topologically correct GeoGraph from given linestrings. Edge and node data are initialized to defaults.
 ///
 /// Nodes will be created at line endpoints in a topologically correct way, i.e. if two
 /// share an endpoint, they will share a common node there.
@@ -106,15 +106,40 @@ pub fn build_geograph_from_lines_with_data<E: Default, D: Default, Ty: petgraph:
     Ok(geograph)
 }
 
+/// Project a geograph into the CRS indicated by `to_crs`.
+pub fn project_geograph<E: Default, N: Default, Ty: petgraph::EdgeType>(
+    geograph: &mut GeoGraph<E, N, Ty>,
+    to_crs: &gdal::spatial_ref::SpatialRef,
+) -> anyhow::Result<()> {
+    let projection = proj::Proj::new_known_crs(
+        &epsg_code_to_authority_string(geograph.crs.auth_code()? as u32),
+        &epsg_code_to_authority_string(to_crs.auth_code()? as u32),
+        None,
+    )?;
+    for (_, _, par_edges) in geograph.edge_graph_mut().all_edges_mut() {
+        for edge in par_edges.iter_mut() {
+            edge.geometry.transform(&projection)?;
+        }
+    }
+    for node in geograph.node_map_mut().values_mut() {
+        node.geometry.transform(&projection)?;
+    }
+
+    geograph.crs = to_crs.clone();
+    Ok(())
+}
+
 #[cfg(test)]
 #[generic_tests::define]
 mod tests {
 
     use std::iter::zip;
 
+    use approx::assert_abs_diff_eq;
+
     use crate::geograph::{primitives::GeoGraph, utils::build_geograph_from_lines};
 
-    use super::build_geograph_from_lines_with_data;
+    use super::{build_geograph_from_lines_with_data, project_geograph};
 
     /// Graph type used in tests, holds no extra data for edges or nodes.
     type TestGraph<Ty> = GeoGraph<(), (), Ty>;
@@ -184,6 +209,61 @@ mod tests {
             assert_eq!(1, edge.len());
             assert_eq!(*expected_data_item, edge.get(0).unwrap().data);
         }
+    }
+
+    #[test]
+    fn test_project_geograph<Ty: petgraph::EdgeType>() {
+        // EPSG 4326 coordinates.
+        let node_1_coord = (139.7895073, 35.6862101);
+        let node_2_coord = (139.7912979, 35.6870132);
+        let node_3_coord = (139.7919128, 35.6862357);
+
+        let lines: Vec<geo::LineString> = vec![
+            vec![node_1_coord, node_2_coord].into(),
+            vec![node_2_coord, node_3_coord].into(),
+        ];
+
+        let mut graph: TestGraph<Ty> = build_geograph_from_lines(lines).unwrap();
+        graph.crs = crate::crs::crs_utils::epsg_4326();
+
+        let target_crs = gdal::spatial_ref::SpatialRef::from_epsg(32654).unwrap(); // UTM zone 54N
+        project_geograph(&mut graph, &target_crs).unwrap();
+
+        // Computed using https://coordinates-converter.com/
+        let exp_node_1_coord = (390467.986, 3949820.494);
+        let exp_node_2_coord = (390631.113, 3949907.576);
+        let exp_node_3_coord = (390685.694, 3949820.653);
+
+        let expected_node_coords = [exp_node_1_coord, exp_node_2_coord, exp_node_3_coord];
+
+        // Millimeter tolerance.
+        let epsilon = 1e-3;
+
+        for (index, (x, y)) in expected_node_coords.iter().enumerate() {
+            let node_geom = graph.node_map().get(&(index as u64)).unwrap().geometry;
+            assert_abs_diff_eq!(node_geom, geo::Point::new(*x, *y), epsilon = epsilon);
+        }
+
+        let expected_node_indices = [(0, 1), (1, 2)];
+        for (start_node_idx, end_node_idx) in expected_node_indices {
+            let edge = graph
+                .edge_graph()
+                .edge_weight(start_node_idx, end_node_idx)
+                .unwrap()
+                .get(0)
+                .unwrap();
+            let start_node_geom = edge.geometry.points().nth(0).unwrap();
+            let (x, y) = expected_node_coords.get(start_node_idx as usize).unwrap();
+            assert_abs_diff_eq!(start_node_geom, geo::Point::new(*x, *y), epsilon = epsilon);
+            let end_node_geom = edge.geometry.points().last().unwrap();
+            let (x, y) = expected_node_coords.get(end_node_idx as usize).unwrap();
+            assert_abs_diff_eq!(end_node_geom, geo::Point::new(*x, *y), epsilon = epsilon);
+        }
+
+        assert_eq!(
+            graph.crs.auth_code().unwrap(),
+            target_crs.auth_code().unwrap()
+        );
     }
 
     #[instantiate_tests(<petgraph::Directed>)]
