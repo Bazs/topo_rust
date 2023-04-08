@@ -4,10 +4,12 @@ pub mod geofile;
 pub mod geograph;
 pub mod osm;
 pub mod topo;
+use crate::crs::crs_utils::epsg_4326;
 use crate::geofile::feature::Feature;
 use crate::geofile::gdal_geofile::{write_features_to_geofile, GdalDriverType};
+use crate::geograph::geo_feature_graph::GeoFeatureGraph;
+use crate::geograph::utils::build_geograph_from_lines;
 use crate::osm::download::{sync_osm_data_to_file, WgsBoundingBox};
-use crate::topo::georef_lines::{read_lines_from_geofile, GeoreferencedLines};
 use crate::topo::topo::{calculate_topo, TopoParams};
 use anyhow::anyhow;
 use clap::Parser;
@@ -61,24 +63,26 @@ fn try_main() -> anyhow::Result<()> {
     let config_contents = read_to_string(args.config_filepath)?;
     let config: Config = serde_yaml::from_str(&config_contents)?;
 
-    let mut ground_truth_georef_lines = match config.ground_truth {
+    let mut ground_truth_graph: GeoFeatureGraph<petgraph::Undirected> = match config.ground_truth {
         GroundTruthConfig::Osm { bounding_box } => {
             let ground_truth_ways =
                 get_ground_truth_ways_from_osm(&bounding_box, &config.data_dir)?;
-            GeoreferencedLines {
-                lines: ground_truth_ways,
-                spatial_ref: gdal::spatial_ref::SpatialRef::from_epsg(4326).unwrap(),
-            }
+            let mut graph = build_geograph_from_lines(ground_truth_ways)?;
+            graph.crs = epsg_4326();
+            graph
         }
-        GroundTruthConfig::Geofile { filepath } => read_lines_from_geofile(&filepath)?,
+        GroundTruthConfig::Geofile { filepath } => GeoFeatureGraph::load_from_geofile(&filepath)?,
     };
     log::info!(
-        "Read {} ground truth edges",
-        ground_truth_georef_lines.lines.len()
+        "Read ground truth graph with {}  edges",
+        ground_truth_graph.edge_graph().edge_count()
     );
 
-    let mut proposal_georef_lines = read_lines_from_geofile(&config.proposal_geofile_path)?;
-    log::info!("Read {} proposal edges", proposal_georef_lines.lines.len());
+    let mut proposal_graph = GeoFeatureGraph::load_from_geofile(&config.proposal_geofile_path)?;
+    log::info!(
+        "Read proposal graph with {} edges",
+        proposal_graph.edge_graph().edge_count()
+    );
     let geojson_dump_filepath = config.data_dir.join("ground_truth.geojson");
 
     // Write the ground truth to file for reference.
@@ -87,20 +91,16 @@ fn try_main() -> anyhow::Result<()> {
         &geojson_dump_filepath
     );
     geofile::geojson::write_lines_to_geojson(
-        &ground_truth_georef_lines.lines,
+        &ground_truth_graph.edge_geometries(),
         &geojson_dump_filepath,
     )?;
 
-    topo::preprocessing::ensure_gt_proposal_same_projected_crs(
-        &mut ground_truth_georef_lines,
-        &mut proposal_georef_lines,
+    topo::preprocessing::ensure_gt_proposal_in_same_projected_crs(
+        &mut ground_truth_graph,
+        &mut proposal_graph,
     )?;
 
-    let topo_result = calculate_topo(
-        &proposal_georef_lines.lines,
-        &ground_truth_georef_lines.lines,
-        &config.topo_params,
-    )?;
+    let topo_result = calculate_topo(&proposal_graph, &ground_truth_graph, &config.topo_params)?;
     log::info!("{:?}", topo_result.f1_score_result);
     write_features_to_geofile(
         &topo_result
@@ -109,7 +109,7 @@ fn try_main() -> anyhow::Result<()> {
             .map(|node| Feature::from(node))
             .collect(),
         &config.data_dir.join("proposal_nodes.gpkg"),
-        Some(&proposal_georef_lines.spatial_ref),
+        Some(&proposal_graph.crs),
         GdalDriverType::GeoPackage.name(),
     )?;
     write_features_to_geofile(
@@ -119,7 +119,7 @@ fn try_main() -> anyhow::Result<()> {
             .map(|node| Feature::from(node))
             .collect(),
         &config.data_dir.join("ground_truth_nodes.gpkg"),
-        Some(&ground_truth_georef_lines.spatial_ref),
+        Some(&ground_truth_graph.crs),
         GdalDriverType::GeoPackage.name(),
     )?;
     Ok(())

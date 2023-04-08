@@ -157,6 +157,13 @@ impl<E: Default, N: Default, Ty: petgraph::EdgeType> GeoGraph<E, N, Ty> {
         }
         Ok(())
     }
+
+    pub fn edge_geometries(&self) -> Vec<geo::LineString> {
+        self.edge_graph()
+            .all_edges()
+            .flat_map(|(_, _, par_edges)| par_edges.iter().map(|edge| edge.geometry.clone()))
+            .collect()
+    }
 }
 
 pub type UnGeoGraph<E, N> = GeoGraph<E, N, petgraph::Undirected>;

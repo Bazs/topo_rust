@@ -10,7 +10,7 @@ use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
 
-use crate::geofile::feature::Feature;
+use crate::{geofile::feature::Feature, geograph::primitives::GeoGraph};
 
 #[derive(PartialEq, Debug)]
 pub struct F1ScoreResult {
@@ -31,18 +31,23 @@ pub struct TopoParams {
     pub hole_radius: f64,
 }
 
-pub fn calculate_topo<'a>(
-    proposal: &Vec<geo::LineString>,
-    ground_truth: &Vec<geo::LineString>,
+pub fn calculate_topo<E: Default, N: Default, Ty: petgraph::EdgeType>(
+    proposal_graph: &GeoGraph<E, N, Ty>,
+    ground_truth_graph: &GeoGraph<E, N, Ty>,
     params: &TopoParams,
 ) -> anyhow::Result<TopoResult> {
-    // Interpolate the edges.
+    let proposal_edges = proposal_graph.edge_geometries();
+    let ground_truth = ground_truth_graph.edge_geometries();
+
+    // TODO ensure that all edge linestrings of both graphs point outward from the same geospatial coordinate.
+
+    // Interpolate the edges. TODO deduplicate points at intersections.
     log::info!("Sampling points on proposal lines");
-    let proposal_points = sample_points_on_lines(proposal, params.resampling_distance);
+    let proposal_points = sample_points_on_lines(&proposal_edges, params.resampling_distance);
     let mut proposal_nodes = road_points_to_topo_nodes(proposal_points);
     log::info!("Sampling points on ground truth lines");
     let ground_truth_points: Vec<RoadPoint> =
-        sample_points_on_lines(ground_truth, params.resampling_distance);
+        sample_points_on_lines(&ground_truth, params.resampling_distance);
     let mut ground_truth_nodes = road_points_to_topo_nodes(ground_truth_points);
     log::info!("Building ground truth point lookup tree");
     let ground_truth_kdtree = build_kdtree_from_nodes(&ground_truth_nodes)?;
@@ -253,6 +258,8 @@ mod tests {
     use rstest::{fixture, rstest};
     use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
+    use crate::geograph::{primitives::GeoGraph, utils::build_geograph_from_lines};
+
     use super::{
         calculate_topo, get_normalized_line_azimuth, sample_points_on_line, F1ScoreResult,
         TopoParams,
@@ -332,12 +339,11 @@ mod tests {
     ) {
         let proposal_line: geo::LineString = proposal_line_coords.into();
         let ground_truth_line: geo::LineString = ground_truth_line_coods.into();
+        let proposal_graph: GeoGraph<(), (), petgraph::Undirected> =
+            build_geograph_from_lines(vec![proposal_line]).unwrap();
+        let ground_truth_graph = build_geograph_from_lines(vec![ground_truth_line]).unwrap();
 
-        let result = calculate_topo(
-            &vec![proposal_line],
-            &vec![ground_truth_line],
-            &default_topo_params,
-        );
+        let result = calculate_topo(&proposal_graph, &ground_truth_graph, &default_topo_params);
         assert!(result.is_ok());
         assert_eq!(expected_result, result.unwrap().f1_score_result)
     }

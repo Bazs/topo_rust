@@ -1,35 +1,37 @@
 use crate::{
     crs::crs_utils::{epsg_code_to_authority_string, EpsgCode},
-    topo::georef_lines::get_utm_zone_for_lines,
+    geograph::{
+        primitives::GeoGraph,
+        utils::{get_utm_zone_for_graph, project_geograph},
+    },
 };
 
-use super::georef_lines::{project_lines, GeoreferencedLines};
-
-pub fn ensure_gt_proposal_same_projected_crs(
-    gt_georef_lines: &mut GeoreferencedLines,
-    proposal_georef_lines: &mut GeoreferencedLines,
+pub fn ensure_gt_proposal_in_same_projected_crs<
+    E: Default,
+    N: Default,
+    Ty: petgraph::EdgeType,
+>(
+    gt_graph: &mut GeoGraph<E, N, Ty>,
+    proposal_graph: &mut GeoGraph<E, N, Ty>,
 ) -> anyhow::Result<()> {
-    if gt_georef_lines.spatial_ref.is_projected() {
-        if gt_georef_lines.spatial_ref.auth_code()?
-            != proposal_georef_lines.spatial_ref.auth_code()?
-        {
+    if gt_graph.crs.is_projected() {
+        if gt_graph.crs.auth_code()? != proposal_graph.crs.auth_code()? {
             log::info!(
-                "Projecting proposal lines to {}",
-                epsg_code_to_authority_string(gt_georef_lines.spatial_ref.auth_code()? as EpsgCode)
+                "Projecting proposal graph to {}",
+                epsg_code_to_authority_string(gt_graph.crs.auth_code()? as EpsgCode)
             );
-            *proposal_georef_lines =
-                project_lines(&proposal_georef_lines, &gt_georef_lines.spatial_ref)?;
+            project_geograph(proposal_graph, &gt_graph.crs)?;
         }
     } else {
-        let utm_zone = get_utm_zone_for_lines(&gt_georef_lines)?;
+        let utm_zone = get_utm_zone_for_graph(&gt_graph)?;
 
         log::info!(
             "Projecting ground truth and proposal lines to {}",
             epsg_code_to_authority_string(utm_zone.auth_code()? as EpsgCode)
         );
 
-        *gt_georef_lines = project_lines(gt_georef_lines, &utm_zone)?;
-        *proposal_georef_lines = project_lines(&proposal_georef_lines, &utm_zone)?;
+        project_geograph(gt_graph, &utm_zone)?;
+        project_geograph(proposal_graph, &utm_zone)?;
     }
     Ok(())
 }
