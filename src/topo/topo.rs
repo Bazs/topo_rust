@@ -10,7 +10,10 @@ use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use kdtree::distance::squared_euclidean;
 use rayon::prelude::*;
 
-use crate::{geofile::feature::Feature, geograph::primitives::GeoGraph};
+use crate::{
+    geofile::feature::Feature,
+    geograph::{primitives::GeoGraph, utils::NodeIndexer},
+};
 
 #[derive(PartialEq, Debug)]
 pub struct F1ScoreResult {
@@ -41,7 +44,8 @@ pub fn calculate_topo<E: Default, N: Default, Ty: petgraph::EdgeType>(
 
     // TODO ensure that all edge linestrings of both graphs point outward from the same geospatial coordinate.
 
-    // Interpolate the edges. TODO deduplicate points at intersections.
+    // Interpolate the edges.
+
     log::info!("Sampling points on proposal lines");
     let proposal_points = sample_points_on_lines(&proposal_edges, params.resampling_distance);
     let mut proposal_nodes = road_points_to_topo_nodes(proposal_points);
@@ -176,12 +180,20 @@ fn build_kdtree_from_nodes(
     Ok(kdtree)
 }
 
+/// Deduplicate RoadPoints by coordinate, and create TopoNodes from them.
+/// The created TopoNodes will have the same id as the index of the first RoadPoint with that coordinate.
 fn road_points_to_topo_nodes(road_points: Vec<RoadPoint>) -> Vec<TopoNode> {
-    road_points
-        .into_iter()
-        .enumerate()
-        .map(|(idx, road_point)| TopoNode::new(road_point, idx as i32))
-        .collect()
+    let mut node_indexer = NodeIndexer::new();
+
+    let mut nodes = Vec::new();
+
+    for point in road_points.into_iter() {
+        let node_idx = node_indexer.get_index_for_coordinate(&point.coord);
+        if node_idx as usize == nodes.len() {
+            nodes.push(TopoNode::new(point, node_idx as i32));
+        }
+    }
+    nodes
 }
 
 fn sample_points_on_lines(

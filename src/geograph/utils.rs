@@ -9,7 +9,7 @@ use super::primitives::{GeoGraph, NodeIdx};
 
 type NodeIndexerPoint = rstar::primitives::GeomWithData<[f64; 2], NodeIdx>;
 
-struct NodeIndexer {
+pub struct NodeIndexer {
     rtree: rstar::RTree<NodeIndexerPoint>,
     current_index: NodeIdx,
 }
